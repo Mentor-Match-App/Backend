@@ -11,28 +11,28 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  name      String
-  user_type String
-  location  String
-  skills    String
-  photo     String
-  about     String
-  Session   Session[]
+  id         Int          @id @default(autoincrement())
+  email      String       @unique
+  name       String?
+  role       String?
+  location   String?
+  skills     String?
+  photo      String?
+  about      String?
+  Session    Session[]
   Experience Experience[]
 }
 
 model Experience {
-  id        Int    @id @default(autoincrement())
-  mentor    User   @relation(fields: [mentorId], references: [id])
-  mentorId  Int
-  title     String
-  company   String
-  location  String
-  from      String
-  to        String
-  current   Boolean
+  id          Int     @id @default(autoincrement())
+  mentor      User    @relation(fields: [mentorId], references: [id])
+  mentorId    Int
+  title       String
+  company     String
+  location    String
+  from        String
+  to          String
+  current     Boolean
   description String
 }
 
