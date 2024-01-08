@@ -136,45 +136,9 @@ app.get(
 );
 
 // SELECT ROLE
-// app.post('/select-role', async (req, res) => {
-// 	console.log('Received request:', req);
-
-// 	try {
-// 		// Assuming that the request body contains the selected role as an enum
-// 		const { selectedRole } = req.body;
-
-// 		// Validate the selected role (ensure it's a valid enum value)
-// 		const validRoles = ['Admin', 'PendingMentor', 'Mentor', 'Mentee'];
-// 		if (!validRoles.includes(selectedRole)) {
-// 			return res.status(400).json({ error: true, message: 'Invalid role selected' });
-// 		}
-
-// 		// Update the user's role in the database (replace 'userId' with the actual user ID)
-// 		const userId = req.user.user.id; // Assuming you have access to the user ID
-// 		const updatedUser = await prisma.user.update({
-// 			where: { id: userId },
-// 			data: { user_type: selectedRole },
-// 		});
-
-// 		// Return a success response with the updated user information
-// 		res.json({
-// 			error: false,
-// 			message: 'Role selected successfully',
-// 			user: {
-// 				id: updatedUser.id,
-// 				email: updatedUser.email,
-// 				user_type: updatedUser.user_type,
-// 			},
-// 		});
-// 	} catch (error) {
-// 		console.error('Error selecting role:', error);
-// 		console.error('Request body:', req.body);
-// 		res.status(500).json({ error: true, message: 'Internal server error' });
-// 	}
-// });
-
-// SELECT ROLE TEST WITH MANUAL USER ID
 app.post('/select-role', async (req, res) => {
+	console.log('Received request:', req);
+
 	try {
 		// Assuming that the request body contains the selected role as an enum
 		const { selectedRole } = req.body;
@@ -185,12 +149,10 @@ app.post('/select-role', async (req, res) => {
 			return res.status(400).json({ error: true, message: 'Invalid role selected' });
 		}
 
-		// Simulate the user ID (replace 'simulatedUserId' with the desired user ID for testing)
-		const simulatedUserId = 'b7c7f815-d75a-4967-b6ad-25a48aa56b6c';
-
-		// Update the user's role in the database
+		// Update the user's role in the database (replace 'userId' with the actual user ID)
+		const userId = req.user.user.id; // Assuming you have access to the user ID
 		const updatedUser = await prisma.user.update({
-			where: { id: simulatedUserId },
+			where: { id: userId },
 			data: { user_type: selectedRole },
 		});
 
@@ -199,14 +161,52 @@ app.post('/select-role', async (req, res) => {
 			error: false,
 			message: 'Role selected successfully',
 			user: {
+				id: updatedUser.id,
+				email: updatedUser.email,
 				user_type: updatedUser.user_type,
 			},
 		});
 	} catch (error) {
 		console.error('Error selecting role:', error);
+		console.error('Request body:', req.body);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
+
+// SELECT ROLE TEST WITH MANUAL USER ID
+// app.post('/select-role', async (req, res) => {
+// 	try {
+// 		// Assuming that the request body contains the selected role as an enum
+// 		const { selectedRole } = req.body;
+
+// 		// Validate the selected role (ensure it's a valid enum value)
+// 		const validRoles = ['Admin', 'PendingMentor', 'Mentor', 'Mentee'];
+// 		if (!validRoles.includes(selectedRole)) {
+// 			return res.status(400).json({ error: true, message: 'Invalid role selected' });
+// 		}
+
+// 		// Simulate the user ID (replace 'simulatedUserId' with the desired user ID for testing)
+// 		const simulatedUserId = 'b7c7f815-d75a-4967-b6ad-25a48aa56b6c';
+
+// 		// Update the user's role in the database
+// 		const updatedUser = await prisma.user.update({
+// 			where: { id: simulatedUserId },
+// 			data: { user_type: selectedRole },
+// 		});
+
+// 		// Return a success response with the updated user information
+// 		res.json({
+// 			error: false,
+// 			message: 'Role selected successfully',
+// 			user: {
+// 				user_type: updatedUser.user_type,
+// 			},
+// 		});
+// 	} catch (error) {
+// 		console.error('Error selecting role:', error);
+// 		res.status(500).json({ error: true, message: 'Internal server error' });
+// 	}
+// });
 
 // Landing page
 app.get('/', (req, res) => {
@@ -216,5 +216,3 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
 	console.log('MentorMatch API running in port: ' + PORT);
 });
-
-//
