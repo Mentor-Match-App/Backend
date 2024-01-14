@@ -1,5 +1,9 @@
 # User API Spec
 
+## Endpoint
+
+https://shy-lime-bream-cuff.cyclic.app
+
 ## Register User
 
 Endpoint : GET /register
