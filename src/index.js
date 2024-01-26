@@ -7,6 +7,9 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const prisma = require('./db');
 
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 const app = express();
 dotenv.config();
 
@@ -90,6 +93,25 @@ app.get(
 		],
 	})
 );
+
+app.post('/api/google-signin', async (req, res) => {
+	const { token } = req.body;
+	try {
+		const ticket = await client.verifyIdToken({
+			idToken: token,
+			audience: process.env.GOOGLE_CLIENT_ID,
+		});
+		const payload = ticket.getPayload();
+
+		// Additional user handling logic...
+
+		res.json({ message: 'User authenticated', user: payload });
+	} catch (error) {
+		console.error('Error in Google Sign-In:', error);
+		res.status(401).json({ message: 'Unauthorized', error: error.toString() });
+	}
+});
+
 
 app.get(
 	'/register',
