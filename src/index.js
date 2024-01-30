@@ -2,45 +2,71 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const prisma = require('./db');
-const { OAuth2Client } = require('google-auth-library');
+const admin = require('firebase-admin');
+const serviceAccount = require('../serviceAccount.json');
 
-const client = new OAuth2Client(
-	'121006467880-u9h5rr2d8a6sgmf6hihs9gmpvcb37eqa.apps.googleusercontent.com'
-); //
+// Firebase Admin Initialization
+admin.initializeApp({
+	credential: admin.credential.cert(serviceAccount),
+});
 
+// Express App Initialization
 const app = express();
+const PORT = process.env.PORT;
 dotenv.config();
 
-const PORT = process.env.PORT;
-
+// Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-async function verifyToken(token) {
-	const ticket = await client.verifyIdToken({
-		idToken: token,
-		audience: '121006467880-u9h5rr2d8a6sgmf6hihs9gmpvcb37eqa.apps.googleusercontent.com', // Replace with your Google client ID
-	});
-	const payload = ticket.getPayload();
-	return payload; // This payload contains user information
+// Verify Google Token Function
+async function verifyToken(idToken) {
+	try {
+		const decodedToken = await admin.auth().verifyIdToken(idToken);
+		const uid = decodedToken.uid;
+		// Lakukan proses lebih lanjut dengan informasi pengguna
+		return decodedToken;
+	} catch (error) {
+		// Tangani error verifikasi token
+		console.error('Error verifying token:', error);
+	}
 }
 
+// Register Endpoint
 app.post('/register', async (req, res) => {
-	const { token } = req.body;
 	try {
-		const payload = await verifyToken(token);
-		const user = await prisma.user.upsert({
-			where: { email: payload['email'] },
-			update: {},
-			create: {
-				email: payload['email'],
-				name: payload['name'],
+		const { idToken } = req.body;
+		if (!idToken) {
+			return res.status(400).json({ error: true, message: 'Missing idToken' });
+		}
+
+		const decodedToken = await verifyToken(idToken);
+		if (!decodedToken) {
+			return res.status(400).json({ error: true, message: 'Invalid idToken' });
+		}
+
+		const { email, name } = decodedToken;
+		const newUser = await prisma.user.create({
+			data: {
+				email: email,
+				name: name,
 			},
 		});
-		res.status(201).json(user);
+
+		res.json({
+			error: false,
+			message: 'User created successfully',
+			user: {
+				id: newUser.id,
+				email: newUser.email,
+				user_type: newUser.user_type,
+			},
+		});
 	} catch (error) {
-		res.status(500).json({ error: error.message });
+		console.error('Error registering user:', error);
+		console.error('Request body:', req.body);
+		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
 
