@@ -2,13 +2,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const prisma = require('./db');
-const admin = require('firebase-admin');
-const serviceAccount = require('../serviceAccount.json');
-
-// Firebase Admin Initialization
-admin.initializeApp({
-	credential: admin.credential.cert(serviceAccount),
-});
 
 // Express App Initialization
 const app = express();
@@ -20,52 +13,43 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// Verify Google Token Function
-async function verifyToken(idToken) {
-	try {
-		const decodedToken = await admin.auth().verifyIdToken(idToken);
-		const uid = decodedToken.uid;
-		// Lakukan proses lebih lanjut dengan informasi pengguna
-		return decodedToken;
-	} catch (error) {
-		// Tangani error verifikasi token
-		console.error('Error verifying token:', error);
-	}
-}
-
 // Register Endpoint
 app.post('/register', async (req, res) => {
 	try {
-		const { idToken } = req.body;
-		if (!idToken) {
-			return res.status(400).json({ error: true, message: 'Missing idToken' });
+		// Extracting name, email, and photoURL from the request body
+		const { name, email, photoURL } = req.body;
+
+		// Check if the user already exists in the database
+		const existingUser = await prisma.user.findUnique({
+			where: { email: email },
+		});
+
+		if (existingUser) {
+			return res.status(409).json({ error: true, message: 'User already exists' });
 		}
 
-		const decodedToken = await verifyToken(idToken);
-		if (!decodedToken) {
-			return res.status(400).json({ error: true, message: 'Invalid idToken' });
-		}
-
-		const { email, name } = decodedToken;
+		// Creating a new user in the database
 		const newUser = await prisma.user.create({
 			data: {
-				email: email,
 				name: name,
+				email: email,
+				photo_url: photoURL,
 			},
 		});
 
-		res.json({
+		// Return a success response with the created user information
+		res.status(201).json({
 			error: false,
-			message: 'User created successfully',
+			message: 'User registered successfully',
 			user: {
 				id: newUser.id,
 				email: newUser.email,
-				user_type: newUser.user_type,
+				name: newUser.name,
+				photo_url: newUser.photo_url,
 			},
 		});
 	} catch (error) {
-		console.error('Error registering user:', error);
-		console.error('Request body:', req.body);
+		console.error('Error in user registration:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
