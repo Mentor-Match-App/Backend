@@ -21,7 +21,7 @@ model User {
   location           String?
   linkedin           String?
   portfolio          String?
-  photo              String
+  photo_url          String
   about              String?
   Community          Community[]
   Session            Session[]
