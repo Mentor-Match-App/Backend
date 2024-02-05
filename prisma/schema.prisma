@@ -11,30 +11,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id                 String           @id @default(uuid()) @db.VarChar(64)
-  user_type          UserType?
-  email              String           @unique @db.VarChar(255)
-  name               String           @db.VarChar(255)
-  gender             Int?             @db.SmallInt
-  skills             String[]
-  location           String?
-  linkedin           String?
-  portfolio          String?
-  photo_url          String
-  about              String?
-  Community          Community[]
-  Session            Session[]
-  Experience         Experience[]
-  HistorySession     HistorySession[]
-  Classes            Classes[]
-  TransactionsMentor Transaction[]    @relation("mentoruser")
-  TransactionsMentee Transaction[]    @relation("menteeuser")
-  Transaction        Transaction[]
-
-  @@map("users")
-}
-
 enum UserType {
   Admin
   PendingMentor
@@ -42,46 +18,80 @@ enum UserType {
   Mentee
 }
 
+enum Gender {
+  Pria
+  Wanita
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.VarChar(64)
+  userType     UserType?
+  email        String        @unique @db.VarChar(255)
+  name         String        @db.VarChar(255)
+  gender       Gender?
+  skills       String[]
+  location     String?
+  linkedin     String?
+  portofolio   String?
+  photoUrl     String        @db.VarChar(255)
+  about        String?
+  communities  Community[]
+  experiences  Experience[]
+  classes      Class[]
+  session      Session[]
+  transactions Transaction[]
+  participant  Participant[]
+
+  @@map("users")
+}
+
+model Session {
+  id              String        @id @default(uuid()) @db.VarChar(64)
+  mentorId        String        @map("mentor_id") @db.VarChar(64)
+  mentor          User          @relation(fields: [mentorId], references: [id])
+  title           String        @db.VarChar(255)
+  description     String        @db.Text
+  dateTime        DateTime      @map("date_time")
+  startTime       DateTime      @map("start_time")
+  endTime         DateTime      @map("end_time")
+  maxParticipants Int           @map("max_participants")
+  isActive        Boolean       @default(true) @map("is_active")
+  participant     Participant[]
+
+  @@map("sessions")
+}
+
+model Participant {
+  sessionId String  @map("session_id") @db.VarChar(64)
+  userId    String  @map("user_id") @db.VarChar(64)
+  user      User    @relation(fields: [userId], references: [id])
+  session   Session @relation(fields: [sessionId], references: [id])
+
+  @@id([sessionId, userId])
+  @@map("participants")
+}
+
 model Community {
-  id      String @id @default(uuid()) @db.VarChar(64)
-  adminId String @map("admin_id") @db.VarChar(64)
-  admin   User   @relation(fields: [adminId], references: [id])
-  name    String @db.VarChar(64)
-  link    String
-  image   String
+  id       String @id @default(uuid()) @db.VarChar(64)
+  adminId  String @map("admin_id") @db.VarChar(64)
+  admin    User   @relation(fields: [adminId], references: [id])
+  name     String @db.VarChar(64)
+  link     String
+  imageUrl String @map("image_url") @db.VarChar(255)
 
   @@map("communities")
 }
 
 model Evaluation {
-  id            String      @id @default(uuid()) @db.VarChar(64)
-  classId       String      @map("class_id") @db.VarChar(64)
-  transactionId String      @map("transaction_id") @db.VarChar(64)
-  class         Classes     @relation(fields: [classId], references: [id])
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
-  createdAt     DateTime    @default(now()) @map("created_at")
-  topic         String      @db.VarChar(64)
-  feedback      String
+  id        String   @id @default(uuid()) @db.VarChar(64)
+  classId   String   @map("class_id") @db.VarChar(64)
+  class     Class    @relation(fields: [classId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  topic     String   @db.VarChar(64)
+  link      String   @db.VarChar(255)
+  feedback  String?  @db.Text
 
   @@map("evaluations")
-}
-
-model Category {
-  id             String    @id @default(uuid()) @db.VarChar(64)
-  name           String    @db.VarChar(64)
-  imgUrl         String    @map("img_url")
-  educationLevel String[]  @map("education_level")
-  Classes        Classes[]
-}
-
-model Session {
-  id               String             @id @default(uuid()) @db.VarChar(64)
-  userId           String             @map("user_id") @db.VarChar(64)
-  user             User               @relation(fields: [userId], references: [id])
-  title            String             @db.VarChar(64)
-  AvailableSession AvailableSession[]
-
-  @@map("sessions")
 }
 
 model Experience {
@@ -95,62 +105,36 @@ model Experience {
   @@map("experiences")
 }
 
-model AvailableSession {
-  id             String           @id @default(uuid()) @db.VarChar(64)
-  sessionId      String           @map("session_id") @db.VarChar(64)
-  session        Session          @relation(fields: [sessionId], references: [id])
-  dateTime       DateTime         @map("date_time")
-  quota          Int
-  HistorySession HistorySession[]
+model Class {
+  id             String        @id @default(uuid()) @db.VarChar(64)
+  user           User?         @relation(fields: [mentorId], references: [id])
+  mentorId       String        @map("mentor_id") @db.VarChar(64)
+  educationLevel String        @map("education_level") @db.VarChar(64)
+  category       String        @db.VarChar(64)
+  name           String        @db.VarChar(64)
+  description    String        @db.Text
+  terms          String[]
+  price          Int
+  isActive       Boolean       @default(false) @map("is_active")
+  isAvailable    Boolean       @default(true) @map("is_available")
+  isVerified     Boolean       @default(false) @map("is_verified")
+  durationInDays Int           @map("duration_in_days")
+  evaluations    Evaluation[]
+  transactions   Transaction[]
 
-  @@map("available_sessions")
-}
-
-model HistorySession {
-  id                  String           @id @default(uuid()) @db.VarChar(64)
-  availableSessionsId String           @map("available_sessions_id") @db.VarChar(64)
-  menteeId            String           @map("mentee_id") @db.VarChar(64)
-  availableSessions   AvailableSession @relation(fields: [availableSessionsId], references: [id])
-  mentee              User             @relation(fields: [menteeId], references: [id])
-
-  @@map("history_sessions")
-}
-
-model Classes {
-  id               String        @id @default(uuid()) @db.VarChar(64)
-  mentorId         String        @map("mentor_id") @db.VarChar(64)
-  educationLevelId String        @map("education_level_id") @db.VarChar(64)
-  mentor           User          @relation(fields: [mentorId], references: [id])
-  educationLevel   Category      @relation(fields: [educationLevelId], references: [id])
-  category         String        @db.VarChar(64)
-  name             String        @db.VarChar(64)
-  description      String
-  price            Int
-  active           Boolean       @default(false)
-  isAvailable      Boolean       @default(true) @map("is_available")
-  durationInDay    Int           @map("duration_in_day")
-  Evaluations      Evaluation[]
-  Transactions     Transaction[]
+  @@map("classes")
 }
 
 model Transaction {
   id            String        @id @default(uuid()) @db.VarChar(64)
   classId       String        @map("class_id") @db.VarChar(64)
-  mentorId      String        @map("mentor_id") @db.VarChar(64)
-  menteeId      String        @map("mentee_id") @db.VarChar(64)
-  class         Classes       @relation(fields: [classId], references: [id])
-  mentor        User          @relation("mentoruser", fields: [mentorId], references: [id])
-  mentee        User          @relation("menteeuser", fields: [menteeId], references: [id])
-  active        Boolean       @default(false)
+  class         Class         @relation(fields: [classId], references: [id])
   createdAt     DateTime      @default(now()) @map("created_at")
-  uniqueCode    String        @unique @map("unique_code") @db.VarChar(3)
+  uniqueCode    Int           @unique @map("unique_code")
   paymentStatus PaymentStatus @default(Pending) @map("payment_status")
-  startDate     DateTime      @map("start_date")
-  endDate       DateTime      @map("end_date")
-  Evaluation    Evaluation[]
-
-  User   User?   @relation(fields: [userId], references: [id])
-  userId String? @db.VarChar(64)
+  expired       DateTime      @default(dbgenerated("NOW() + interval '1 day'"))
+  User          User          @relation(fields: [userId], references: [id])
+  userId        String        @db.VarChar(64)
 
   @@map("transactions")
 }
