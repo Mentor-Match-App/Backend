@@ -56,6 +56,7 @@ model Session {
   endTime         DateTime      @map("end_time")
   maxParticipants Int           @map("max_participants")
   isActive        Boolean       @default(true) @map("is_active")
+  zoomLink        String        @map("zoom_link") @db.VarChar(255)
   participant     Participant[]
 
   @@map("sessions")
@@ -119,6 +120,7 @@ model Class {
   isAvailable    Boolean       @default(true) @map("is_available")
   isVerified     Boolean       @default(false) @map("is_verified")
   durationInDays Int           @map("duration_in_days")
+  zoomLink       String        @map("zoom_link") @db.VarChar(255)
   evaluations    Evaluation[]
   transactions   Transaction[]
 

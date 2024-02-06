@@ -34,7 +34,8 @@ const verifyToken = (req, res, next) => {
 	}
 };
 
-// *****VISITOR***** //
+
+// ***********************VISITOR***********************//
 
 // Login User
 app.post('/login', async (req, res) => {
@@ -111,7 +112,8 @@ app.post('/select-role', verifyToken, async (req, res) => {
 	}
 });
 
-// *****MENTEE***** //
+
+// ***********************MENTEE***********************//
 
 // Update Profile
 app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
@@ -170,292 +172,10 @@ app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
 	}
 });
 
-// *****CLASSES***** //
 
-// Function to generate a unique 3-digit code
-const generateUniqueCode = () => {
-	// Generate a number between 100 and 999
-	return Math.floor(Math.random() * (999 - 100 + 1)) + 100;
-};
-// Create Class
+// ***********************MENTOR***********************//
 
-app.post('/classes', verifyToken, async (req, res) => {
-	try {
-		// Extract the class details from the request body
-		const { mentorId, educationLevel, category, name, description, terms, price, durationInDays } =
-			req.body;
-
-		// Create a new class
-		const newClass = await prisma.class.create({
-			data: {
-				user: { connect: { id: mentorId } },
-				educationLevel: educationLevel,
-				category: category,
-				name: name,
-				description: description,
-				terms: terms,
-				price: price,
-				durationInDays: durationInDays,
-			},
-		});
-
-		// Return the new class information
-
-		res.json({
-			error: false,
-			message: 'Class created successfully',
-			class: newClass,
-		});
-	} catch (error) {
-		console.error('Error creating class:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// Get All Classes
-
-app.get('/classes', verifyToken, async (req, res) => {
-	try {
-		// Fetch all classes
-		const classes = await prisma.class.findMany({
-			include: {
-				evaluations: true,
-				transactions: true,
-			},
-		});
-
-		res.json({
-			error: false,
-			message: 'Classes fetched successfully',
-			classes: classes,
-		});
-	} catch (error) {
-		console.error('Error fetching classes:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// Get Class by ID
-
-app.get('/classes/:id', verifyToken, async (req, res) => {
-	try {
-		// Fetch the class by ID
-		const classId = req.params.id;
-		const classDetails = await prisma.class.findUnique({
-			where: { id: classId },
-			include: {
-				evaluations: true,
-				transactions: true,
-			},
-		});
-
-		res.json({
-			error: false,
-			message: 'Class fetched successfully',
-			class: classDetails,
-		});
-	} catch (error) {
-		console.error('Error fetching class:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// book a class
-
-app.post('/classes/:id/book', verifyToken, async (req, res) => {
-	try {
-		const classId = req.params.id; // Assuming classId is passed as URL parameter
-		const { userId } = req.body;
-
-		// Check if the class exists
-		const existingClass = await prisma.class.findUnique({
-			where: { id: classId },
-		});
-
-		if (!existingClass) {
-			return res.status(404).json({ error: true, message: 'Class not found' });
-		}
-
-		// Check if the user exists
-		const existingUser = await prisma.user.findUnique({
-			where: { id: userId },
-		});
-
-		if (!existingUser) {
-			return res.status(404).json({ error: true, message: 'User not found' });
-		}
-
-		// Attempt to generate a unique code
-		let uniqueCode = generateUniqueCode();
-		let isUnique = false;
-
-		while (!isUnique) {
-			const existingTransaction = await prisma.transaction.findUnique({
-				where: { uniqueCode },
-			});
-
-			if (existingTransaction) {
-				uniqueCode = generateUniqueCode(); // Regenerate the code if not unique
-			} else {
-				isUnique = true; // Unique code found
-			}
-		}
-
-		// Calculate the total amount to be paid, incorporating the uniqueCode if necessary
-		let totalAmount = existingClass.price + uniqueCode; // Example: Adding uniqueCode directly to the price
-
-		// Book the class with the unique code
-		const newBooking = await prisma.transaction.create({
-			data: {
-				classId: classId,
-				userId: userId,
-				uniqueCode: uniqueCode, // Use the generated unique code
-				// Assume other necessary fields are added here
-			},
-		});
-
-		// Return success response with the new booking information, including total amount
-		res.json({
-			error: false,
-			message: 'Class booked successfully',
-			booking: newBooking,
-			totalAmount: totalAmount, // Total amount including the uniqueCode
-		});
-	} catch (error) {
-		console.error('Error booking class:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// *****SESSION***** //
-
-// Create Session
-
-app.post('/sessions', verifyToken, async (req, res) => {
-	try {
-		// Extract the session details from the request body
-		const { mentorId, title, description, dateTime, startTime, endTime, maxParticipants } =
-			req.body;
-
-		// Create a new session
-		const newSession = await prisma.session.create({
-			data: {
-				mentor: { connect: { id: mentorId } },
-				title: title,
-				description: description,
-				dateTime: dateTime,
-				startTime: startTime,
-				endTime: endTime,
-				maxParticipants: maxParticipants,
-			},
-		});
-
-		// Return the new session information
-		res.json({
-			error: false,
-			message: 'Session created successfully',
-			session: newSession,
-		});
-	} catch (error) {
-		console.error('Error creating session:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// Get All Sessions
-
-app.get('/sessions', verifyToken, async (req, res) => {
-	try {
-		// Fetch all sessions
-		const sessions = await prisma.session.findMany({
-			include: {
-				participant: true,
-			},
-		});
-
-		res.json({
-			error: false,
-			message: 'Sessions fetched successfully',
-			sessions: sessions,
-		});
-	} catch (error) {
-		console.error('Error fetching sessions:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// Get Session by ID
-
-app.get('/sessions/:id', verifyToken, async (req, res) => {
-	try {
-		// Fetch the session by ID
-		const sessionId = req.params.id;
-		const sessionDetails = await prisma.session.findUnique({
-			where: { id: sessionId },
-			include: {
-				participant: true,
-			},
-		});
-
-		res.json({
-			error: false,
-			message: 'Session fetched successfully',
-			session: sessionDetails,
-		});
-	} catch (error) {
-		console.error('Error fetching session:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// book a session
-app.post('/sessions/:id/book', verifyToken, async (req, res) => {
-	try {
-		// Extract the session ID and user ID from the request body
-		const { sessionId, userId } = req.body;
-
-		// Check if the session exists
-		const existingSession = await prisma.session.findUnique({
-			where: { id: sessionId },
-		});
-
-		if (!existingSession) {
-			return res.status(404).json({ error: true, message: 'Session not found' });
-		}
-
-		// Check if the user exists
-		const existingUser = await prisma.user.findUnique({
-			where: { id: userId },
-		});
-
-		if (!existingUser) {
-			return res.status(404).json({ error: true, message: 'User not found' });
-		}
-
-		// Book the session
-		const newBooking = await prisma.participant.create({
-			data: {
-				sessionId: sessionId,
-				userId: userId,
-			},
-		});
-
-		// Return success response with the new booking information
-		res.json({
-			error: false,
-			message: 'Session booked successfully',
-			booking: newBooking,
-		});
-	} catch (error) {
-		console.error('Error booking session:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-// *****MENTOR***** //
-
-// Register as Mentor
-
+// Register as Mentor 
 app.patch('/mentor/:id/register', verifyToken, async (req, res) => {
 	try {
 		// Extract the mentor details from the request body
@@ -525,8 +245,283 @@ app.patch('/mentor/:id/register', verifyToken, async (req, res) => {
 	}
 });
 
-// Create Evaluation
+// ? CLASSES
 
+// Function to generate a unique 3-digit code
+const generateUniqueCode = () => {
+	// Generate a number between 100 and 999
+	return Math.floor(Math.random() * (999 - 100 + 1)) + 100;
+};
+
+// Create Class
+app.post('/classes', verifyToken, async (req, res) => {
+	try {
+		// Extract the class details from the request body
+		const { mentorId, educationLevel, category, name, description, terms, price, durationInDays } =
+			req.body;
+
+		// Create a new class
+		const newClass = await prisma.class.create({
+			data: {
+				user: { connect: { id: mentorId } },
+				educationLevel: educationLevel,
+				category: category,
+				name: name,
+				description: description,
+				terms: terms,
+				price: price,
+				durationInDays: durationInDays,
+			},
+		});
+
+		// Return the new class information
+
+		res.json({
+			error: false,
+			message: 'Class created successfully',
+			class: newClass,
+		});
+	} catch (error) {
+		console.error('Error creating class:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Get All Classes
+app.get('/classes', verifyToken, async (req, res) => {
+	try {
+		// Fetch all classes
+		const classes = await prisma.class.findMany({
+			include: {
+				evaluations: true,
+				transactions: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Classes fetched successfully',
+			classes: classes,
+		});
+	} catch (error) {
+		console.error('Error fetching classes:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Get Class by ID
+app.get('/classes/:id', verifyToken, async (req, res) => {
+	try {
+		// Fetch the class by ID
+		const classId = req.params.id;
+		const classDetails = await prisma.class.findUnique({
+			where: { id: classId },
+			include: {
+				evaluations: true,
+				transactions: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Class fetched successfully',
+			class: classDetails,
+		});
+	} catch (error) {
+		console.error('Error fetching class:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// book a class
+app.post('/classes/:id/book', verifyToken, async (req, res) => {
+	try {
+		const classId = req.params.id; // Assuming classId is passed as URL parameter
+		const { userId } = req.body;
+
+		// Check if the class exists
+		const existingClass = await prisma.class.findUnique({
+			where: { id: classId },
+		});
+
+		if (!existingClass) {
+			return res.status(404).json({ error: true, message: 'Class not found' });
+		}
+
+		// Check if the user exists
+		const existingUser = await prisma.user.findUnique({
+			where: { id: userId },
+		});
+
+		if (!existingUser) {
+			return res.status(404).json({ error: true, message: 'User not found' });
+		}
+
+		// Attempt to generate a unique code
+		let uniqueCode = generateUniqueCode();
+		let isUnique = false;
+
+		while (!isUnique) {
+			const existingTransaction = await prisma.transaction.findUnique({
+				where: { uniqueCode },
+			});
+
+			if (existingTransaction) {
+				uniqueCode = generateUniqueCode(); // Regenerate the code if not unique
+			} else {
+				isUnique = true; // Unique code found
+			}
+		}
+
+		// Calculate the total amount to be paid, incorporating the uniqueCode if necessary
+		let totalAmount = existingClass.price + uniqueCode; // Example: Adding uniqueCode directly to the price
+
+		// Book the class with the unique code
+		const newBooking = await prisma.transaction.create({
+			data: {
+				classId: classId,
+				userId: userId,
+				uniqueCode: uniqueCode, // Use the generated unique code
+				// Assume other necessary fields are added here
+			},
+		});
+
+		// Return success response with the new booking information, including total amount
+		res.json({
+			error: false,
+			message: 'Class booked successfully',
+			booking: newBooking,
+			totalAmount: totalAmount, // Total amount including the uniqueCode
+		});
+	} catch (error) {
+		console.error('Error booking class:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// ? SESSION
+
+// Create Session
+app.post('/sessions', verifyToken, async (req, res) => {
+	try {
+		// Extract the session details from the request body
+		const { mentorId, title, description, dateTime, startTime, endTime, maxParticipants } =
+			req.body;
+
+		// Create a new session
+		const newSession = await prisma.session.create({
+			data: {
+				mentor: { connect: { id: mentorId } },
+				title: title,
+				description: description,
+				dateTime: dateTime,
+				startTime: startTime,
+				endTime: endTime,
+				maxParticipants: maxParticipants,
+			},
+		});
+
+		// Return the new session information
+		res.json({
+			error: false,
+			message: 'Session created successfully',
+			session: newSession,
+		});
+	} catch (error) {
+		console.error('Error creating session:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Get All Sessions
+app.get('/sessions', verifyToken, async (req, res) => {
+	try {
+		// Fetch all sessions
+		const sessions = await prisma.session.findMany({
+			include: {
+				participant: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Sessions fetched successfully',
+			sessions: sessions,
+		});
+	} catch (error) {
+		console.error('Error fetching sessions:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Get Session by ID
+app.get('/sessions/:id', verifyToken, async (req, res) => {
+	try {
+		// Fetch the session by ID
+		const sessionId = req.params.id;
+		const sessionDetails = await prisma.session.findUnique({
+			where: { id: sessionId },
+			include: {
+				participant: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Session fetched successfully',
+			session: sessionDetails,
+		});
+	} catch (error) {
+		console.error('Error fetching session:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// book a session
+app.post('/sessions/:id/book', verifyToken, async (req, res) => {
+	try {
+		// Extract the session ID and user ID from the request body
+		const { sessionId, userId } = req.body;
+
+		// Check if the session exists
+		const existingSession = await prisma.session.findUnique({
+			where: { id: sessionId },
+		});
+
+		if (!existingSession) {
+			return res.status(404).json({ error: true, message: 'Session not found' });
+		}
+
+		// Check if the user exists
+		const existingUser = await prisma.user.findUnique({
+			where: { id: userId },
+		});
+
+		if (!existingUser) {
+			return res.status(404).json({ error: true, message: 'User not found' });
+		}
+
+		// Book the session
+		const newBooking = await prisma.participant.create({
+			data: {
+				sessionId: sessionId,
+				userId: userId,
+			},
+		});
+
+		// Return success response with the new booking information
+		res.json({
+			error: false,
+			message: 'Session booked successfully',
+			booking: newBooking,
+		});
+	} catch (error) {
+		console.error('Error booking session:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Create Evaluation
 app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
 	try {
 		// Extract the evaluation details from the request body
@@ -555,7 +550,6 @@ app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
 });
 
 // Send Feedback
-
 app.post('/evaluation/:evaluationId/feedback', verifyToken, async (req, res) => {
 	try {
 		// Extract evaluationId and feedback from the request
@@ -565,7 +559,6 @@ app.post('/evaluation/:evaluationId/feedback', verifyToken, async (req, res) => 
 		// Validate if the evaluation exists and if the current user is authorized to update it
 		// This step is crucial to ensure that only the mentor who owns the evaluation can update it
 		// Implementation of this validation depends on your application's logic
-		
 
 		// Update the evaluation with the feedback
 		const updatedEvaluation = await prisma.evaluation.update({
@@ -589,53 +582,169 @@ app.post('/evaluation/:evaluationId/feedback', verifyToken, async (req, res) => 
 	}
 });
 
+// ***********************ADMIN***********************//
 
-// *****COMMUNITY***** //
-
-// Create Community
-
-app.post('/admin/:id/create-community', verifyToken, async (req, res) => {
+// verify mentor
+app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 	try {
-		// Extract the community details from the request body
-		const userId = req.params.id;
-		const { name, link, imageUrl } = req.body;
+		// Extract the mentor ID from the request body
+		const { mentorId } = req.body;
 
-		// Create a new community
-		const newCommunity = await prisma.community.create({
-			data: {
-				admin: { connect: { id: userId } },
-				name: name,
-				link: link,
-				imageUrl: imageUrl,
-			},
+		// Check if the mentor exists
+		const existingMentor = await prisma.user.findUnique({
+			where: { id: mentorId },
 		});
 
-		// Return the new community information
+		if (!existingMentor) {
+			return res.status(404).json({ error: true, message: 'Mentor not found' });
+		}
+
+		// Verify the mentor
+		const updatedMentor = await prisma.user.update({
+			where: { id: mentorId },
+			data: { userType: 'Mentor' },
+		});
+
+		// Return success response with the updated mentor information
 		res.json({
 			error: false,
-			message: 'Community created successfully',
-			community: newCommunity,
+			message: 'Mentor verified successfully',
+			mentor: updatedMentor,
 		});
 	} catch (error) {
-		console.error('Error creating community:', error);
+		console.error('Error verifying mentor:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
 
-// Get All Communities
-
-app.get('/communities', verifyToken, async (req, res) => {
+// verify class
+app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 	try {
-		// Fetch all communities
-		const communities = await prisma.community.findMany();
+		// Extract the class ID from the
+		const { classId } = req.body;
 
+		// Check if the class exists
+		const existingClass = await prisma.class.findUnique({
+			where: { id: classId },
+		});
+
+		if (!existingClass) {
+			return res.status(404).json({ error: true, message: 'Class not found' });
+		}
+
+		// Verify the class
+		const updatedClass = await prisma.class.update({
+			where: { id: classId },
+			data: { isVerified: true },
+		});
+
+		// Return success response with the updated class information
 		res.json({
 			error: false,
-			message: 'Communities fetched successfully',
-			communities: communities,
+			message: 'Class verified successfully',
+			class: updatedClass,
 		});
 	} catch (error) {
-		console.error('Error fetching communities:', error);
+		console.error('Error verifying class:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// verify mentee transaction
+app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
+	try {
+		// Extract the transaction ID from the request body
+		const { transactionId } = req.body;
+
+		// Check if the transaction exists
+		const existingTransaction = await prisma.transaction.findUnique({
+			where: { id: transactionId },
+		});
+
+		if (!existingTransaction) {
+			return res.status(404).json({ error: true, message: 'Transaction not found' });
+		}
+
+		// Verify the transaction
+		const updatedTransaction = await prisma.transaction.update({
+			where: { id: transactionId },
+			data: { isVerified: true },
+		});
+
+		// Return success response with the updated transaction information
+		res.json({
+			error: false,
+			message: 'Transaction verified successfully',
+			transaction: updatedTransaction,
+		});
+	} catch (error) {
+		console.error('Error verifying transaction:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// add zoom link to session
+app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
+	try {
+		// Extract the session ID and zoom link from the request body
+		const { sessionId, zoomLink } = req.body;
+
+		// Check if the session exists
+		const existingSession = await prisma.session.findUnique({
+			where: { id: sessionId },
+		});
+
+		if (!existingSession) {
+			return res.status(404).json({ error: true, message: 'Session not found' });
+		}
+
+		// Add the zoom link to the session
+		const updatedSession = await prisma.session.update({
+			where: { id: sessionId },
+			data: { zoomLink: zoomLink },
+		});
+
+		// Return success response with the updated session information
+		res.json({
+			error: false,
+			message: 'Zoom link added successfully',
+			session: updatedSession,
+		});
+	} catch (error) {
+		console.error('Error adding zoom link to session:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// add zoom link to class
+app.patch('/admin/add-zoom-link-class', verifyToken, async (req, res) => {
+	try {
+		// Extract the class ID and zoom link from the request body
+		const { classId, zoomLink } = req.body;
+
+		// Check if the class exists
+		const existingClass = await prisma.class.findUnique({
+			where: { id: classId },
+		});
+
+		if (!existingClass) {
+			return res.status(404).json({ error: true, message: 'Class not found' });
+		}
+
+		// Add the zoom link to the class
+		const updatedClass = await prisma.class.update({
+			where: { id: classId },
+			data: { zoomLink: zoomLink },
+		});
+
+		// Return success response with the updated class information
+		res.json({
+			error: false,
+			message: 'Zoom link added successfully',
+			class: updatedClass,
+		});
+	} catch (error) {
+		console.error('Error adding zoom link to class:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
@@ -740,7 +849,7 @@ app.get('/users/:id', async (req, res) => {
 	}
 });
 
-// list mentors by id
+// get mentor by id
 app.get('/mentors/:id', async (req, res) => {
 	try {
 		const user = await prisma.user.findMany({
@@ -765,7 +874,7 @@ app.get('/mentors/:id', async (req, res) => {
 	}
 });
 
-// list mentees by id
+// get mentee by id
 app.get('/mentees/:id', async (req, res) => {
 	try {
 		const user = await prisma.user.findMany({
@@ -790,10 +899,45 @@ app.get('/mentees/:id', async (req, res) => {
 	}
 });
 
-// list all communities
-app.get('/communities', async (req, res) => {
+// ? COMMUNITY
+
+// Create Community
+
+app.post('/admin/:id/create-community', verifyToken, async (req, res) => {
 	try {
+		// Extract the community details from the request body
+		const userId = req.params.id;
+		const { name, link, imageUrl } = req.body;
+
+		// Create a new community
+		const newCommunity = await prisma.community.create({
+			data: {
+				admin: { connect: { id: userId } },
+				name: name,
+				link: link,
+				imageUrl: imageUrl,
+			},
+		});
+
+		// Return the new community information
+		res.json({
+			error: false,
+			message: 'Community created successfully',
+			community: newCommunity,
+		});
+	} catch (error) {
+		console.error('Error creating community:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Get All Communities
+
+app.get('/communities', verifyToken, async (req, res) => {
+	try {
+		// Fetch all communities
 		const communities = await prisma.community.findMany();
+
 		res.json({
 			error: false,
 			message: 'Communities fetched successfully',
@@ -805,42 +949,14 @@ app.get('/communities', async (req, res) => {
 	}
 });
 
-// list all sessions
-app.get('/sessions', async (req, res) => {
-	try {
-		const sessions = await prisma.session.findMany();
-		res.json({
-			error: false,
-			message: 'Sessions fetched successfully',
-			sessions: sessions,
-		});
-	} catch (error) {
-		console.error('Error fetching sessions:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
+// **************************END**********************//
 
-// list all classes
-app.get('/classes', async (req, res) => {
-	try {
-		const classes = await prisma.classes.findMany();
-		res.json({
-			error: false,
-			message: 'Classes fetched successfully',
-			classes: classes,
-		});
-	} catch (error) {
-		console.error('Error fetching classes:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
 
 // Landing page
 app.get('/', (req, res) => {
 	res.send('Hello World!');
 });
 
-// add mentor manually to database
 app.listen(PORT, () => {
 	console.log('MentorMatch API running in port: ' + PORT);
 });
