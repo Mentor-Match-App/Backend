@@ -4,6 +4,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const cron = require('node-cron');
 
 // Express App Initialization
 const app = express();
@@ -34,14 +35,29 @@ const verifyToken = (req, res, next) => {
 	}
 };
 
+// firebase admin initialization
+const admin = require('firebase-admin');
+
+const serviceAccount = require('../serviceAccount.json');
+
+admin.initializeApp({
+	credential: admin.credential.cert(serviceAccount),
+});
 
 // ***********************VISITOR***********************//
 
-// Login User
+// Login
+
 app.post('/login', async (req, res) => {
 	try {
-		// Extracting name, email, and photoURL from the request body
-		const { name, email, photoURL } = req.body;
+		// Extract the ID token from the request
+		const { token } = req.body;
+
+		// Verify the ID token and decode its payload
+		const decodedToken = await admin.auth().verifyIdToken(token);
+
+		// Extract user info from the decoded token
+		const { name, email, picture } = decodedToken;
 
 		// Check if the user already exists in the database
 		let user = await prisma.user.findUnique({
@@ -54,24 +70,23 @@ app.post('/login', async (req, res) => {
 				data: {
 					name: name,
 					email: email,
-					photoUrl: photoURL, // Ensure this matches the column name in your database
+					photoUrl: picture, // Ensure this matches the column name in your database
 				},
 			});
 		}
 
-		// Generate a token
-		const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET);
+		// Generate a token for your own application if needed
+		const appToken = jwt.sign({ email: user.email }, process.env.JWT_SECRET);
 
-		// Return a success response with the user information
-		// Ensure that user object has all the required fields
+		// Return a success response with the user information and token
 		res.json({
 			error: false,
 			message: 'User logged in successfully',
 			user: {
-				id: user.id, // Ensure these are the correct fields as per your database
+				id: user.id,
 				name: user.name,
 			},
-			token: token,
+			token: appToken,
 		});
 	} catch (error) {
 		console.error('Error in user login:', error);
@@ -80,10 +95,11 @@ app.post('/login', async (req, res) => {
 });
 
 // Select Role
-app.post('/select-role', verifyToken, async (req, res) => {
+app.patch('/users/:id/select-role', verifyToken, async (req, res) => {
 	try {
 		// Extracting the user ID and selected role from the request body
-		const { id, selectedRole } = req.body;
+		const id = req.params.id;
+		const { selectedRole } = req.body;
 
 		// Validate the selected role
 		const validRoles = ['Admin', 'PendingMentor', 'Mentor', 'Mentee'];
@@ -91,20 +107,15 @@ app.post('/select-role', verifyToken, async (req, res) => {
 			return res.status(400).json({ error: true, message: 'Invalid role selected' });
 		}
 
-		const updatedUser = await prisma.user.update({
+		await prisma.user.update({
 			where: { id: id },
 			data: { userType: selectedRole },
 		});
 
-		// Return success response with updated user information
+		// Return success response
 		res.json({
 			error: false,
 			message: 'Role selected successfully',
-			user: {
-				id: updatedUser.id,
-				email: updatedUser.email,
-				userType: updatedUser.userType,
-			},
 		});
 	} catch (error) {
 		console.error('Error selecting role:', error);
@@ -112,13 +123,13 @@ app.post('/select-role', verifyToken, async (req, res) => {
 	}
 });
 
-
 // ***********************MENTEE***********************//
 
 // Update Profile
-app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
+app.patch('/users/mentee/:id/profile', verifyToken, async (req, res) => {
 	try {
-		const { id, job, school, skills, location, about } = req.body;
+		const id = req.params.id;
+		const { job, school, skills, location, about } = req.body;
 
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
@@ -130,7 +141,7 @@ app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
 		}
 
 		// Update user information
-		const updatedUser = await prisma.user.update({
+		await prisma.user.update({
 			where: { id: id },
 			data: {
 				skills: skills,
@@ -156,15 +167,6 @@ app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
 		res.json({
 			error: false,
 			message: 'User profile updated successfully',
-			user: {
-				id: updatedUser.id,
-				email: updatedUser.email,
-				name: updatedUser.name,
-				skills: updatedUser.skills,
-				location: updatedUser.location,
-				about: updatedUser.about,
-				// Note: job and school are not directly part of the User model response here
-			},
 		});
 	} catch (error) {
 		console.error('Error updating user profile:', error);
@@ -172,11 +174,94 @@ app.patch('/mentee/update-profile', verifyToken, async (req, res) => {
 	}
 });
 
+// filter class mentor by education level and category
+app.get('/class/filter-mentors', async (req, res) => {
+	try {
+		// Mengambil query parameters untuk education level dan category
+		const { educationLevel, category } = req.query;
+
+		// Mencari mentor yang sesuai dengan filter
+		const mentors = await prisma.user.findMany({
+			where: {
+				userType: 'Mentor',
+				// Jika tidak ada parameter yang diberikan, pastikan mentor memiliki setidaknya satu kelas yang terverifikasi
+				class: {
+					isVerified: true,
+					...(educationLevel && { educationLevel: educationLevel }),
+					...(category && { category: category }),
+				},
+			},
+			include: {
+				class: {
+					where: {
+						isVerified: true, // Include hanya kelas yang terverifikasi
+					},
+				}, // Assuming 'class' is the correct relation name
+				mentorReviews: true,
+				experiences: true,
+			},
+		});
+
+		// Mengembalikan response sukses dengan list mentor yang difilter
+		res.json({
+			error: false,
+			message: 'Filtered mentors fetched successfully',
+			mentors: mentors,
+		});
+	} catch (error) {
+		console.error('Error fetching filtered mentors:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// filter session mentor by category
+app.get('/session/filter-mentors', async (req, res) => {
+	try {
+		const { category } = req.query;
+
+		const mentors = await prisma.user.findMany({
+			where: {
+				userType: 'Mentor',
+				// Jika category disediakan, filter berdasarkan category; jika tidak, pastikan mentor memiliki setidaknya satu session
+				...(category
+					? {
+							session: {
+								some: {
+									category: category,
+								},
+							},
+					  }
+					: {
+							session: {
+								some: {},
+							},
+					  }),
+			},
+			include: {
+				session: {
+					include: {
+						participant: true, // Menyertakan data Participant untuk setiap Session
+					},
+				},
+				experiences: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Filtered mentors fetched successfully',
+			mentors: mentors,
+		});
+	} catch (error) {
+		console.error('Error fetching filtered mentors:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
 
 // ***********************MENTOR***********************//
 
-// Register as Mentor 
-app.patch('/mentor/:id/register', verifyToken, async (req, res) => {
+// Register as Mentor
+app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 	try {
 		// Extract the mentor details from the request body
 		const userId = req.params.id;
@@ -237,7 +322,6 @@ app.patch('/mentor/:id/register', verifyToken, async (req, res) => {
 		res.json({
 			error: false,
 			message: 'Mentor registered successfully',
-			user: user,
 		});
 	} catch (error) {
 		console.error('Error registering mentor:', error);
@@ -254,7 +338,7 @@ const generateUniqueCode = () => {
 };
 
 // Create Class
-app.post('/classes', verifyToken, async (req, res) => {
+app.post('/class', verifyToken, async (req, res) => {
 	try {
 		// Extract the class details from the request body
 		const { mentorId, educationLevel, category, name, description, terms, price, durationInDays } =
@@ -279,7 +363,6 @@ app.post('/classes', verifyToken, async (req, res) => {
 		res.json({
 			error: false,
 			message: 'Class created successfully',
-			class: newClass,
 		});
 	} catch (error) {
 		console.error('Error creating class:', error);
@@ -288,7 +371,7 @@ app.post('/classes', verifyToken, async (req, res) => {
 });
 
 // Get All Classes
-app.get('/classes', verifyToken, async (req, res) => {
+app.get('/class/all', verifyToken, async (req, res) => {
 	try {
 		// Fetch all classes
 		const classes = await prisma.class.findMany({
@@ -309,8 +392,56 @@ app.get('/classes', verifyToken, async (req, res) => {
 	}
 });
 
+// Get Active Classes with no Zoom Link
+app.get('/class/active', async (req, res) => {
+	try {
+		// Menggunakan Prisma untuk query data
+		const activeClasses = await prisma.class.findMany({
+			where: {
+				isActive: true, // Filter hanya kelas yang aktif
+				// Filter kelas yang tidak memiliki linkZoom
+				NOT: {
+					zoomLink: {
+						not: null,
+					},
+				},
+			},
+			select: {
+				name: true, // Nama kelas
+				durationInDays: true, // Durasi kelas
+				user: {
+					// Informasi mentor
+					select: {
+						name: true, // Nama mentor
+						photoUrl: true, // URL foto mentor
+					},
+				},
+				transactions: {
+					select: {
+						User: {
+							select: {
+								name: true, // Nama mentee
+							},
+						},
+					},
+				},
+			},
+		});
+
+		// Mengembalikan response dengan data kelas yang aktif
+		res.json({
+			error: false,
+			message: 'Active classes fetched successfully',
+			classes: activeClasses,
+		});
+	} catch (error) {
+		console.error('Error fetching active classes:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
 // Get Class by ID
-app.get('/classes/:id', verifyToken, async (req, res) => {
+app.get('/class/:id', verifyToken, async (req, res) => {
 	try {
 		// Fetch the class by ID
 		const classId = req.params.id;
@@ -333,11 +464,108 @@ app.get('/classes/:id', verifyToken, async (req, res) => {
 	}
 });
 
-// book a class
-app.post('/classes/:id/book', verifyToken, async (req, res) => {
+//  booking a class
+app.post('/class/:id/book', async (req, res) => {
 	try {
-		const classId = req.params.id; // Assuming classId is passed as URL parameter
+		const classId = req.params.id;
 		const { userId } = req.body;
+
+		// Transaction to ensure atomicity of the booking process
+		const newBooking = await prisma.$transaction(async (prisma) => {
+			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
+			if (!existingClass || !existingClass.isAvailable) {
+				throw new Error('Class not available for booking');
+			}
+
+			const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+			if (!existingUser) {
+				throw new Error('User not found');
+			}
+
+			let uniqueCode = generateUniqueCode();
+			let isUnique = false;
+			while (!isUnique) {
+				const existingTransaction = await prisma.transaction.findUnique({ where: { uniqueCode } });
+				if (existingTransaction) {
+					uniqueCode = generateUniqueCode();
+				} else {
+					isUnique = true;
+				}
+			}
+
+			await prisma.class.update({ where: { id: classId }, data: { isAvailable: false } });
+
+			return prisma.transaction.create({
+				data: {
+					classId,
+					userId,
+					uniqueCode,
+					expired: new Date(Date.now() + 60 * 1000), // 60*1000 milliseconds = 1 minute
+				},
+			});
+		});
+
+		res.json({ error: false, message: 'Class booked successfully', booking: newBooking });
+	} catch (error) {
+		console.error('Error booking class:', error);
+		res.status(500).json({ error: true, message: error.message || 'Internal server error' });
+	}
+});
+
+cron.schedule('*/1 * * * *', async () => {
+	// Runs every minute
+	console.log('Checking for transactions to expire...');
+	await expireTransactions();
+	// Add call to updateClassAvailability if implemented
+});
+
+async function expireTransactions() {
+	const now = new Date();
+	// First, find transactions that should be expired
+	const transactionsToExpire = await prisma.transaction.findMany({
+		where: {
+			expired: { lt: now },
+			paymentStatus: { notIn: ['Expired', 'Approved'] },
+		},
+		select: {
+			id: true, // Select only the id and classId to minimize data transfer
+			classId: true,
+		},
+	});
+
+	// If there are transactions to expire, process them
+	if (transactionsToExpire.length > 0) {
+		// Update the transactions to 'Expired'
+		await prisma.transaction.updateMany({
+			where: {
+				id: { in: transactionsToExpire.map((t) => t.id) },
+			},
+			data: { paymentStatus: 'Expired' },
+		});
+
+		// Make the associated classes available again
+		// This logic assumes one transaction can block a class, adjust as necessary for your logic
+		for (const { classId } of transactionsToExpire) {
+			await prisma.class.update({
+				where: { id: classId },
+				data: { isAvailable: true },
+			});
+		}
+
+		console.log(
+			`Processed and expired ${transactionsToExpire.length} transactions, associated classes made available.`
+		);
+	} else {
+		console.log('No transactions to expire at this time.');
+	}
+}
+
+// add review to mentor
+app.patch('/class/:id/review', verifyToken, async (req, res) => {
+	try {
+		// Extract the class ID and review details from the request body
+		const classId = req.params.id;
+		const { userId, review } = req.body;
 
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
@@ -357,44 +585,23 @@ app.post('/classes/:id/book', verifyToken, async (req, res) => {
 			return res.status(404).json({ error: true, message: 'User not found' });
 		}
 
-		// Attempt to generate a unique code
-		let uniqueCode = generateUniqueCode();
-		let isUnique = false;
-
-		while (!isUnique) {
-			const existingTransaction = await prisma.transaction.findUnique({
-				where: { uniqueCode },
-			});
-
-			if (existingTransaction) {
-				uniqueCode = generateUniqueCode(); // Regenerate the code if not unique
-			} else {
-				isUnique = true; // Unique code found
-			}
-		}
-
-		// Calculate the total amount to be paid, incorporating the uniqueCode if necessary
-		let totalAmount = existingClass.price + uniqueCode; // Example: Adding uniqueCode directly to the price
-
-		// Book the class with the unique code
-		const newBooking = await prisma.transaction.create({
+		// Add the review to user's model
+		const newReview = await prisma.user.update({
 			data: {
 				classId: classId,
 				userId: userId,
-				uniqueCode: uniqueCode, // Use the generated unique code
-				// Assume other necessary fields are added here
+				review: review,
 			},
 		});
 
-		// Return success response with the new booking information, including total amount
+		// Return success response with the new review information
 		res.json({
 			error: false,
-			message: 'Class booked successfully',
-			booking: newBooking,
-			totalAmount: totalAmount, // Total amount including the uniqueCode
+			message: 'Review added successfully',
+			review: newReview,
 		});
 	} catch (error) {
-		console.error('Error booking class:', error);
+		console.error('Error adding review to class:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
@@ -668,7 +875,13 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 		// Verify the transaction
 		const updatedTransaction = await prisma.transaction.update({
 			where: { id: transactionId },
-			data: { isVerified: true },
+			data: { paymentStatus: 'Approved' },
+		});
+
+		// Update the class to be active
+		await prisma.class.update({
+			where: { id: existingTransaction.classId },
+			data: { isActive: true },
 		});
 
 		// Return success response with the updated transaction information
@@ -757,7 +970,7 @@ app.get('/users', async (req, res) => {
 			include: {
 				experiences: true,
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
@@ -781,7 +994,7 @@ app.get('/mentors', async (req, res) => {
 			where: { userType: 'Mentor' },
 			include: {
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
@@ -806,10 +1019,11 @@ app.get('/mentees', async (req, res) => {
 			where: { userType: 'Mentee' },
 			include: {
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
+				experiences: true,
 			},
 		});
 
@@ -832,7 +1046,7 @@ app.get('/users/:id', async (req, res) => {
 			include: {
 				experiences: true,
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
@@ -857,10 +1071,11 @@ app.get('/mentors/:id', async (req, res) => {
 			include: {
 				experiences: true,
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
+				mentorReviews: true,
 			},
 		});
 		res.json({
@@ -882,7 +1097,7 @@ app.get('/mentees/:id', async (req, res) => {
 			include: {
 				experiences: true,
 				communities: true,
-				classes: true,
+				class: true,
 				session: true,
 				participant: true,
 				transactions: true,
@@ -950,7 +1165,6 @@ app.get('/communities', verifyToken, async (req, res) => {
 });
 
 // **************************END**********************//
-
 
 // Landing page
 app.get('/', (req, res) => {

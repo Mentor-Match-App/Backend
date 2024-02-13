@@ -24,25 +24,41 @@ enum Gender {
 }
 
 model User {
-  id           String        @id @default(uuid()) @db.VarChar(64)
-  userType     UserType?
-  email        String        @unique @db.VarChar(255)
-  name         String        @db.VarChar(255)
-  gender       Gender?
-  skills       String[]
-  location     String?
-  linkedin     String?
-  portofolio   String?
-  photoUrl     String        @db.VarChar(255)
-  about        String?
-  communities  Community[]
-  experiences  Experience[]
-  classes      Class[]
-  session      Session[]
-  transactions Transaction[]
-  participant  Participant[]
+  id            String        @id @default(uuid()) @db.VarChar(64)
+  userType      UserType?
+  email         String        @unique @db.VarChar(255)
+  name          String        @db.VarChar(255)
+  skills        String[]
+  gender        Gender?
+  location      String?
+  linkedin      String?
+  portofolio    String?
+  photoUrl      String        @db.VarChar(255)
+  about         String?
+  communities   Community[]
+  experiences   Experience[]
+  class         Class?
+  session       Session[]
+  transactions  Transaction[]
+  participant   Participant[]
+  menteeReviews Review[]      @relation("MenteeReviews")
+  mentorReviews Review[]      @relation("MentorReviews")
 
   @@map("users")
+}
+
+// review 
+
+model Review {
+  id         String @id @default(uuid()) @db.VarChar(64)
+  reviewerId String @map("reviewer_id") @db.VarChar(64)
+  mentorId   String @map("mentor_id") @db.VarChar(64)
+  content    String @db.Text
+
+  reviewer User @relation("MenteeReviews", fields: [reviewerId], references: [id])
+  mentor   User @relation("MentorReviews", fields: [mentorId], references: [id])
+
+  @@map("reviews")
 }
 
 model Session {
@@ -51,12 +67,13 @@ model Session {
   mentor          User          @relation(fields: [mentorId], references: [id])
   title           String        @db.VarChar(255)
   description     String        @db.Text
+  category        String        @db.VarChar(64)
   dateTime        DateTime      @map("date_time")
   startTime       DateTime      @map("start_time")
   endTime         DateTime      @map("end_time")
   maxParticipants Int           @map("max_participants")
   isActive        Boolean       @default(true) @map("is_active")
-  zoomLink        String        @map("zoom_link") @db.VarChar(255)
+  zoomLink        String?       @map("zoom_link") @db.VarChar(255)
   participant     Participant[]
 
   @@map("sessions")
@@ -108,8 +125,8 @@ model Experience {
 
 model Class {
   id             String        @id @default(uuid()) @db.VarChar(64)
-  user           User?         @relation(fields: [mentorId], references: [id])
-  mentorId       String        @map("mentor_id") @db.VarChar(64)
+  mentorId       String        @unique @map("mentor_id") @db.VarChar(64)
+  mentor         User          @relation(fields: [mentorId], references: [id])
   educationLevel String        @map("education_level") @db.VarChar(64)
   category       String        @db.VarChar(64)
   name           String        @db.VarChar(64)
@@ -120,7 +137,7 @@ model Class {
   isAvailable    Boolean       @default(true) @map("is_available")
   isVerified     Boolean       @default(false) @map("is_verified")
   durationInDays Int           @map("duration_in_days")
-  zoomLink       String        @map("zoom_link") @db.VarChar(255)
+  zoomLink       String?       @map("zoom_link") @db.VarChar(255)
   evaluations    Evaluation[]
   transactions   Transaction[]
 
@@ -144,5 +161,5 @@ model Transaction {
 enum PaymentStatus {
   Pending
   Approved
-  Rejected
+  Expired
 }
