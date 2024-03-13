@@ -16,6 +16,7 @@ enum UserType {
   PendingMentor
   Mentor
   Mentee
+  RejectedMentor
 }
 
 enum Gender {
@@ -37,12 +38,17 @@ model User {
   about         String?
   communities   Community[]
   experiences   Experience[]
-  class         Class?
+  class         Class[]
   session       Session[]
   transactions  Transaction[]
   participant   Participant[]
   menteeReviews Review[]      @relation("MenteeReviews")
   mentorReviews Review[]      @relation("MentorReviews")
+
+  accountNumber String?    @map("account_number") @db.VarChar(64)
+  accountName   String?    @map("account_name") @db.VarChar(64)
+  Feedback      Feedback[]
+  rejectReason  String?    @map("reject_reason") @db.VarChar(255)
 
   @@map("users")
 }
@@ -101,15 +107,27 @@ model Community {
 }
 
 model Evaluation {
-  id        String   @id @default(uuid()) @db.VarChar(64)
-  classId   String   @map("class_id") @db.VarChar(64)
-  class     Class    @relation(fields: [classId], references: [id])
-  createdAt DateTime @default(now()) @map("created_at")
-  topic     String   @db.VarChar(64)
-  link      String   @db.VarChar(255)
-  feedback  String?  @db.Text
+  id        String     @id @default(uuid()) @db.VarChar(64)
+  classId   String     @map("class_id") @db.VarChar(64)
+  class     Class      @relation(fields: [classId], references: [id])
+  createdAt DateTime   @default(now()) @map("created_at")
+  topic     String     @db.VarChar(64)
+  link      String     @db.VarChar(255)
+  feedbacks Feedback[]
 
   @@map("evaluations")
+}
+
+model Feedback {
+  id           String @id @default(uuid()) @db.VarChar(64)
+  evaluationId String @map("evaluation_id") @db.VarChar(64)
+  menteeId     String @map("mentee_id") @db.VarChar(64)
+  content      String @db.Text
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id])
+  mentee     User       @relation(fields: [menteeId], references: [id])
+
+  @@map("feedbacks")
 }
 
 model Experience {
@@ -124,24 +142,43 @@ model Experience {
 }
 
 model Class {
-  id             String        @id @default(uuid()) @db.VarChar(64)
-  mentorId       String        @unique @map("mentor_id") @db.VarChar(64)
-  mentor         User          @relation(fields: [mentorId], references: [id])
-  educationLevel String        @map("education_level") @db.VarChar(64)
-  category       String        @db.VarChar(64)
-  name           String        @db.VarChar(64)
-  description    String        @db.Text
-  terms          String[]
-  price          Int
-  isActive       Boolean       @default(false) @map("is_active")
-  isAvailable    Boolean       @default(true) @map("is_available")
-  isVerified     Boolean       @default(false) @map("is_verified")
-  durationInDays Int           @map("duration_in_days")
-  zoomLink       String?       @map("zoom_link") @db.VarChar(255)
-  evaluations    Evaluation[]
-  transactions   Transaction[]
+  id               String             @id @default(uuid()) @db.VarChar(64)
+  mentorId         String             @map("mentor_id") @db.VarChar(64)
+  mentor           User               @relation(fields: [mentorId], references: [id])
+  educationLevel   String             @map("education_level") @db.VarChar(64)
+  category         String             @db.VarChar(64)
+  name             String             @db.VarChar(64)
+  description      String             @db.Text
+  terms            String[]
+  targetLearning   String[]
+  price            Int
+  isActive         Boolean            @default(false) @map("is_active")
+  isAvailable      Boolean            @default(false) @map("is_available")
+  isVerified       Boolean            @default(false) @map("is_verified")
+  startDate        DateTime           @map("start_date")
+  endDate          DateTime           @map("end_date")
+  schedule         String             @db.VarChar(64)
+  durationInDays   Int                @map("duration_in_days")
+  location         String             @db.VarChar(64)
+  address          String?            @db.VarChar(255)
+  maxParticipants  Int                @map("max_participants")
+  zoomLink         String?            @map("zoom_link") @db.VarChar(255)
+  evaluations      Evaluation[]
+  transactions     Transaction[]
+  learningMaterial LearningMaterial[]
+  rejectReason     String?            @map("reject_reason") @db.VarChar(255)
 
   @@map("classes")
+}
+
+model LearningMaterial {
+  id      String @id @default(uuid()) @db.VarChar(64)
+  classId String @map("class_id") @db.VarChar(64)
+  class   Class  @relation(fields: [classId], references: [id])
+  title   String @db.VarChar(64)
+  link    String @db.VarChar(255)
+
+  @@map("learning_materials")
 }
 
 model Transaction {

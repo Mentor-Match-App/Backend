@@ -14,9 +14,7 @@ Request Body :
 
 ```json
 {
-	"name": "string",
-	"email": "string",
-	"photoURL": "string"
+	"token": "string"
 }
 ```
 
@@ -27,10 +25,13 @@ Response :
 	"error": false,
 	"message": "User logged in successfully",
 	"user": {
-		"id": "string",
-		"name": "string"
+		"id": "f10965a1-05a2-493c-8949-4a22a66c9c30",
+		"name": "Jeremy Lewi",
+		"email": "jeremylewi28@gmail.com",
+		"photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKjIif75VtrDQFci10g0lWFOP6KJdcScVQhf9A6Ly9ANQ=s96-c",
+		"userType": "Mentee"
 	},
-	"token": "string"
+	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImplcmVteWxld2kyOEBnbWFpbC5jb20iLCJpYXQiOjE3MDgxNjY2NzJ9.w65JAabS4PIbO9J2Jw1g69QkCw2m85mWHu55vT_741A"
 }
 ```
 
@@ -73,9 +74,10 @@ Request Body :
 {
 	"job": "string",
 	"school": "string",
-	"skills": ["string"],
+	"skills": ["string", "string"],
 	"location": "string",
-	"about": "string"
+	"about": "string",
+	"linkedin": "string"
 }
 ```
 
@@ -153,7 +155,6 @@ Response :
 }
 ```
 
-
 # Class API Spec
 
 ## Create Class
@@ -166,16 +167,15 @@ Request Body :
 
 ```json
 {
-  "mentorId": "string",
-  "educationLevel": "string",
-  "category": "string",
-  "name": "string",
-  "description": "string",
-  "terms": "string",
-  "price": "number",
-  "durationInDays": "number"
+	"mentorId": "string",
+	"educationLevel": "string",
+	"category": "string",
+	"name": "string",
+	"description": "string",
+	"terms": "string",
+	"price": "number",
+	"durationInDays": "number"
 }
-
 ```
 
 Response Body Success :
@@ -183,11 +183,11 @@ Response Body Success :
 ```json
 {
 	"error": false,
-	"message": "Class created successfully",
+	"message": "Class created successfully"
 }
 ```
 
-## Get All Class 
+## Get All Class
 
 Endpoint : `GET /class/all`
 
@@ -199,9 +199,7 @@ Response Body Success :
 {
 	"error": false,
 	"message": "success",
-	"classes": [
-		
-	]
+	"classes": []
 }
 ```
 
@@ -229,4 +227,3 @@ Response Body Success :
 	}
 }
 ```
-
