@@ -1504,13 +1504,6 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 			data: { paymentStatus: 'Approved' },
 		});
 
-		// Update the class to be active
-		await prisma.class.update({
-			where: { id: existingTransaction.classId },
-			data: { isActive: true },
-		});
-
-		// Return success response with the updated transaction information
 		res.json({
 			error: false,
 			message: 'Transaction verified successfully',
@@ -1518,6 +1511,37 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 		});
 	} catch (error) {
 		console.error('Error verifying transaction:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// reject mentee transaction
+app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
+	try {
+		const { transactionId } = req.body;
+
+		// Check if the transaction exists
+		const existingTransaction = await prisma.transaction.findUnique({
+			where: { id: transactionId },
+		});
+
+		if (!existingTransaction) {
+			return res.status(404).json({ error: true, message: 'Transaction not found' });
+		}
+
+		// Reject the transaction
+		const updatedTransaction = await prisma.transaction.update({
+			where: { id: transactionId },
+			data: { paymentStatus: 'Rejected' },
+		});
+
+		res.json({
+			error: false,
+			message: 'Transaction rejected successfully',
+			transaction: updatedTransaction,
+		});
+	} catch (error) {
+		console.error('Error rejecting transaction:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
@@ -1642,6 +1666,36 @@ app.get('/admin/unverified-mentor', async (req, res) => {
 		});
 	} catch (error) {
 		console.error('Error fetching unverified mentors:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// list all transaction where paymentStatus is Pending
+app.get('/admin/unverified-transaction', async (req, res) => {
+	try {
+		const unverifiedTransactions = await prisma.transaction.findMany({
+			where: { paymentStatus: 'Pending' },
+			include: {
+				class: {
+					include: {
+						mentor: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
+				User: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Unverified transactions fetched successfully',
+			transactions: unverifiedTransactions,
+		});
+	} catch (error) {
+		console.error('Error fetching unverified transactions:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
