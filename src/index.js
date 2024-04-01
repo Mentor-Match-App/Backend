@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const cron = require('node-cron');
+const { DateTime } = require('luxon');
 
 // Express App Initialization
 
@@ -141,6 +142,11 @@ app.get('/class/filter-mentors', async (req, res) => {
 				userType: 'Mentor',
 				class: {
 					every: {
+						startDate: {
+							gt: new Date(),
+						},
+					},
+					some: {
 						isVerified: true,
 						...(educationLevel && { educationLevel: educationLevel }),
 						...(category && { category: category }),
@@ -564,7 +570,6 @@ app.post('/mentor/:id/class', async (req, res) => {
 		if (!existingMentor) {
 			return res.status(404).json({ error: true, message: 'Mentor not found' });
 		}
-
 		// Create a new class
 		await prisma.class.create({
 			data: {
@@ -576,8 +581,8 @@ app.post('/mentor/:id/class', async (req, res) => {
 				terms: terms,
 				price: price,
 				durationInDays: durationInDays,
-				startDate: new Date(startDate),
-				endDate: new Date(endDate),
+				startDate: DateTime.fromISO(startDate, { zone: 'UTC' }).setZone('Asia/Jakarta').toJSDate(),
+				endDate: DateTime.fromISO(endDate, { zone: 'UTC' }).setZone('Asia/Jakarta').toJSDate(),
 				schedule: schedule,
 				address: address,
 				location: location,
@@ -597,7 +602,66 @@ app.post('/mentor/:id/class', async (req, res) => {
 });
 
 // Edit Class
-//buat api ajukaan ulang kelas. nanti rejectReason dihapus biar jadi null
+app.put('/class/:id', verifyToken, async (req, res) => {
+	try {
+		const classId = req.params.id;
+		const {
+			educationLevel,
+			category,
+			name,
+			description,
+			terms,
+			targetLearning,
+			price,
+			durationInDays,
+			startDate,
+			endDate,
+			schedule,
+			address,
+			location,
+			maxParticipants,
+		} = req.body;
+
+		// Find the class by ID
+		const existingClass = await prisma.class.findUnique({
+			where: { id: classId },
+		});
+
+		if (!existingClass) {
+			return res.status(404).json({ error: true, message: 'Class not found' });
+		}
+
+		// Update the class details
+		const updatedClass = await prisma.class.update({
+			where: { id: classId },
+			data: {
+				educationLevel: educationLevel,
+				category: category,
+				name: name,
+				description: description,
+				terms: terms,
+				price: price,
+				durationInDays: durationInDays,
+				startDate: new Date(startDate),
+				endDate: new Date(endDate),
+				schedule: schedule,
+				address: address,
+				location: location,
+				maxParticipants: maxParticipants,
+				rejectReason: null, // Set rejectReason to null
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Class updated successfully',
+			class: updatedClass,
+		});
+	} catch (error) {
+		console.error('Error updating class:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
 
 app.patch('/mentor/:id/class', async (req, res) => {
 	try {
@@ -803,9 +867,16 @@ app.post('/class/:id/book', async (req, res) => {
 				},
 			});
 
+			const pendingBookingsCount = await prisma.transaction.count({
+				where: {
+					classId: classId,
+					paymentStatus: 'Pending',
+				},
+			});
+
 			const classCapacity = existingClass.maxParticipants;
 
-			if (approvedBookingsCount >= classCapacity) {
+			if (approvedBookingsCount + pendingBookingsCount >= classCapacity) {
 				throw new Error('Class is fully booked');
 			}
 
@@ -830,7 +901,9 @@ app.post('/class/:id/book', async (req, res) => {
 					classId,
 					userId,
 					uniqueCode,
-					expired: new Date(Date.now() + 3 * 60 * 60 * 1000), // 60*1000 milliseconds = 1 menit
+					// expired: new Date(Date.now() + 3 * 60 * 60 * 1000), // 60*1000 milliseconds = 1 menit
+					// make expired 24 hours
+					expired: new Date(Date.now() + 24 * 60 * 60 * 1000),
 				},
 			});
 		});
@@ -950,6 +1023,32 @@ async function updateAllClassesStatus() {
 					isActive: false,
 					isAvailable: false,
 					// Tentukan nilai isVerified sesuai dengan kebutuhan
+				},
+			});
+		}
+
+		// Kondisi 4: jika jumlah transaksi yang disetujui + pending sama dengan kapasitas kelas maka kelas tidak tersedia lagi
+
+		const pendingTransactions = classInfo.transactions.filter(
+			(transaction) => transaction.paymentStatus === 'Pending'
+		);
+
+		if (approvedTransactions.length + pendingTransactions.length === classInfo.maxParticipants) {
+			await prisma.class.update({
+				where: { id: classInfo.id },
+				data: {
+					isAvailable: false,
+				},
+			});
+		}
+
+		// Kondisi 5: Jika End Date sudah lewat maka kelas tidak tersedia lagi
+
+		if (currentDate > classInfo.endDate) {
+			await prisma.class.update({
+				where: { id: classInfo.id },
+				data: {
+					isAvailable: false,
 				},
 			});
 		}
@@ -1160,12 +1259,55 @@ app.post('/session/:id/book', async (req, res) => {
 	}
 });
 
+// update all session status when datetime pass and  startTime is passed (session is started)
+
+async function updateAllSessionStatus() {
+	const allSessions = await prisma.session.findMany({});
+
+	const currentDate = new Date();
+
+	for (const sessionInfo of allSessions) {
+		// update isActive to false if the session is started
+		if (currentDate >= sessionInfo.startTime) {
+			await prisma.session.update({
+				where: { id: sessionInfo.id },
+				data: {
+					isActive: false,
+				},
+			});
+		}
+	}
+}
+
+// Memanggil fungsi untuk memperbarui semua sesi
+setInterval(() => {
+	updateAllSessionStatus()
+		.then(() => console.log('Semua status sesi diperbarui.'))
+		.catch((error) => console.error(error));
+}, 5000); // 5000 milidetik = 5 detik
+
 // Create Evaluation
 app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
 	try {
 		// Extract the evaluation details from the request body
 		const classId = req.params.id;
 		const { topic, link } = req.body;
+
+		// Check if evaluation already exists for this topic
+		const existingEvaluation = await prisma.evaluation.findFirst({
+			where: {
+				classId: classId,
+				topic: topic,
+			},
+		});
+
+		if (existingEvaluation) {
+			return res.status(400).json({
+				error: true,
+				message: 'Evaluation with this topic already exists for this class',
+				evaluation: existingEvaluation,
+			});
+		}
 
 		// Create a new evaluation
 		const newEvaluation = await prisma.evaluation.create({
@@ -1194,6 +1336,22 @@ app.post('/class/:id/learning-material', verifyToken, async (req, res) => {
 		// Extract the learning material details from the request body
 		const classId = req.params.id;
 		const { title, link } = req.body;
+
+		// Check if learning material already exists for this class
+		const existingMaterial = await prisma.learningMaterial.findFirst({
+			where: {
+				classId: classId,
+				title: title,
+			},
+		});
+
+		if (existingMaterial) {
+			return res.status(400).json({
+				error: true,
+				message: 'Learning material with this title already exists for this class',
+				material: existingMaterial,
+			});
+		}
 
 		// Create a new learning material
 		const newMaterial = await prisma.learningMaterial.create({
@@ -1579,39 +1737,6 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 	}
 });
 
-// add zoom link to class
-app.patch('/admin/add-zoom-link-class', verifyToken, async (req, res) => {
-	try {
-		// Extract the class ID and zoom link from the request body
-		const { classId, zoomLink } = req.body;
-
-		// Check if the class exists
-		const existingClass = await prisma.class.findUnique({
-			where: { id: classId },
-		});
-
-		if (!existingClass) {
-			return res.status(404).json({ error: true, message: 'Class not found' });
-		}
-
-		// Add the zoom link to the class
-		const updatedClass = await prisma.class.update({
-			where: { id: classId },
-			data: { zoomLink: zoomLink },
-		});
-
-		// Return success response with the updated class information
-		res.json({
-			error: false,
-			message: 'Zoom link added successfully',
-			class: updatedClass,
-		});
-	} catch (error) {
-		console.error('Error adding zoom link to class:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
 // list all class where isVerified is false
 app.get('/admin/unverified-class', async (req, res) => {
 	try {
@@ -1624,9 +1749,8 @@ app.get('/admin/unverified-class', async (req, res) => {
 				isVerified: false,
 				rejectReason: null,
 
-				// Add condition for startDate to be greater than today
 				startDate: {
-					gt: today,
+					gt: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000),
 				},
 			},
 			include: {
@@ -1700,6 +1824,101 @@ app.get('/admin/unverified-transaction', async (req, res) => {
 	}
 });
 
+// list all transaction
+app.get('/admin/list-transaction', verifyToken, async (req, res) => {
+	try {
+		const transactions = await prisma.transaction.findMany({
+			include: {
+				class: {
+					include: {
+						mentor: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
+				User: true,
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Transactions fetched successfully',
+			transactions: transactions,
+		});
+	} catch (error) {
+		console.error('Error fetching transactions:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// list classes by education level
+app.get('/admin/list-class/:educationLevel', verifyToken, async (req, res) => {
+	try {
+		const { educationLevel } = req.params;
+		const classes = await prisma.class.findMany({
+			where: {
+				educationLevel: educationLevel,
+				// isVerified: true,
+			},
+			include: {
+				mentor: {
+					select: {
+						name: true,
+						photoUrl: true,
+					},
+				},
+				transactions: {
+					// users name who have booked the class and their payment status are approved
+					where: { paymentStatus: 'Approved' },
+					include: {
+						User: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Classes fetched successfully',
+			classes: classes,
+		});
+	} catch (error) {
+		console.error('Error fetching classes:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// List all sessions
+app.get('/admin/list-session', verifyToken, async (req, res) => {
+	try {
+		const sessions = await prisma.session.findMany({
+			include: {
+				mentor: {
+					select: {
+						name: true,
+						photoUrl: true,
+					},
+				},
+			},
+		});
+
+		res.json({
+			error: false,
+			message: 'Sessions fetched successfully',
+			sessions: sessions,
+		});
+	} catch (error) {
+		console.error('Error fetching sessions:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
 // list all users
 app.get('/users', async (req, res) => {
 	try {
@@ -1730,6 +1949,28 @@ app.get('/admin/list-mentee', verifyToken, async (req, res) => {
 	try {
 		const mentees = await prisma.user.findMany({
 			where: { userType: 'Mentee' },
+			include: {
+				experiences: true,
+				transactions: {
+					where: { paymentStatus: 'Approved' },
+					include: {
+						class: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
+				participant: {
+					include: {
+						session: {
+							select: {
+								title: true,
+							},
+						},
+					},
+				},
+			},
 		});
 
 		res.json({
@@ -1748,6 +1989,31 @@ app.get('/admin/list-mentor', verifyToken, async (req, res) => {
 	try {
 		const mentors = await prisma.user.findMany({
 			where: { userType: 'Mentor' },
+			include: {
+				experiences: true,
+				class: {
+					select: {
+						name: true,
+						isVerified: true,
+					},
+				},
+				session: {
+					select: {
+						title: true,
+						isActive: true,
+					},
+				},
+				mentorReviews: {
+					// nama pengulas
+					include: {
+						reviewer: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
+			},
 		});
 
 		res.json({
