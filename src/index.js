@@ -214,6 +214,11 @@ app.get('/session/filter-mentors', async (req, res) => {
 				...(category
 					? {
 							session: {
+								every: {
+									startDate: {
+										gt: new Date(),
+									},
+								},
 								some: {
 									category: category,
 								},
@@ -1116,10 +1121,22 @@ app.post('/mentor/:id/session', async (req, res) => {
 		const { title, description, category, dateTime, startTime, endTime, maxParticipants } =
 			req.body;
 
-		// Konversi string ISO 8601 ke objek Date
-		const parsedDateTime = new Date(dateTime);
-		const parsedStartTime = new Date(startTime);
-		const parsedEndTime = new Date(endTime);
+		// Cek apakah ada sesi lain pada hari yang sama dengan rentang waktu startTime dan endTime
+		const existingSession = await prisma.session.findFirst({
+			where: {
+				AND: [
+					{ mentorId: mentorId },
+					{ dateTime: { gte: new Date(dateTime) } },
+					{ dateTime: { lt: new Date(endTime) } },
+				],
+			},
+		});
+
+		if (existingSession) {
+			return res
+				.status(400)
+				.json({ error: true, message: 'Sesi sudah ada dalam rentang waktu yang sama' });
+		}
 
 		const session = await prisma.session.create({
 			data: {
@@ -1127,9 +1144,9 @@ app.post('/mentor/:id/session', async (req, res) => {
 				title: title,
 				description: description,
 				category: category,
-				dateTime: parsedDateTime,
-				startTime: parsedStartTime,
-				endTime: parsedEndTime,
+				dateTime: DateTime.fromISO(dateTime, { zone: 'UTC' }).setZone('Asia/Jakarta').toJSDate(),
+				startTime: DateTime.fromISO(startTime, { zone: 'UTC' }).setZone('Asia/Jakarta').toJSDate(),
+				endTime: DateTime.fromISO(endTime, { zone: 'UTC' }).setZone('Asia/Jakarta').toJSDate(),
 				maxParticipants: maxParticipants,
 			},
 		});
@@ -1146,6 +1163,7 @@ app.post('/mentor/:id/session', async (req, res) => {
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
+
 
 // Get All Sessions
 app.get('/session/all', verifyToken, async (req, res) => {
@@ -1264,11 +1282,13 @@ app.post('/session/:id/book', async (req, res) => {
 async function updateAllSessionStatus() {
 	const allSessions = await prisma.session.findMany({});
 
-	const currentDate = new Date();
+	const currentDate = DateTime.now().plus({ hours: 7 }).toJSDate();
 
 	for (const sessionInfo of allSessions) {
-		// update isActive to false if the session is started
-		if (currentDate >= sessionInfo.startTime) {
+		const sessionStartTimeUTC = new Date(sessionInfo.startTime); // Waktu mulai Konversi waktu mulai sesi ke zona waktu Indonesia (
+
+		// Set isActive to false if datetime is passed
+		if (currentDate > sessionStartTimeUTC) {
 			await prisma.session.update({
 				where: { id: sessionInfo.id },
 				data: {
