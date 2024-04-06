@@ -450,10 +450,10 @@ app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
 		// Return the new mentor information
 		res.json({
 			error: false,
-			message: 'Mentor registered successfully',
+			message: 'Mentor registered update successfully',
 		});
 	} catch (error) {
-		console.error('Error registering mentor:', error);
+		console.error('Error registering update mentor:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
