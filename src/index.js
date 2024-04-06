@@ -416,7 +416,7 @@ app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
 		if (job || company) {
 			await prisma.experience.updateMany({
 				where: {
-					userId: id,
+					userId: userId,
 					isCurrentJob: true,
 				},
 				data: {
@@ -430,7 +430,7 @@ app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
 		if (experiences && experiences.length > 0) {
 			await prisma.experience.deleteMany({
 				where: {
-					userId: id,
+					userId: userId,
 					isCurrentJob: false,
 				},
 			});
@@ -440,7 +440,7 @@ app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
 					return {
 						jobTitle: experience.role,
 						company: experience.experienceCompany,
-						userId: id,
+						userId: userId,
 						isCurrentJob: false,
 					};
 				}),
