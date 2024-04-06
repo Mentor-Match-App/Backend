@@ -42,7 +42,6 @@ const admin = require('firebase-admin');
 
 const fs = require('fs');
 
-
 const serviceAccount = {
 	type: 'service_account',
 	project_id: 'mentor-match-412713',
@@ -56,8 +55,6 @@ const serviceAccount = {
 	client_x509_cert_url: process.env.GOOGLE_CLIENT_X509_CERT_URL,
 	universe_domain: 'googleapis.com',
 };
-
-
 
 admin.initializeApp({
 	credential: admin.credential.cert(serviceAccount),
@@ -371,6 +368,95 @@ app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
+// Register update mentor
+app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
+	try {
+		// Extract the mentor details from the request body
+		const userId = req.params.id;
+		const {
+			gender,
+			job,
+			company,
+			location,
+			skills,
+			linkedin,
+			portofolio,
+			experiences,
+			about,
+			accountNumber,
+			accountName,
+		} = req.body;
+
+		// Check if the user exists
+		const existingUser = await prisma.user.findUnique({
+			where: { id: userId },
+		});
+
+		if (!existingUser) {
+			return res.status(404).json({ error: true, message: 'User not found' });
+		}
+
+		// update mentor information
+		await prisma.user.update({
+			where: { id: userId },
+			data: {
+				userType: 'PendingMentor',
+				gender: gender,
+				location: location,
+				skills: skills,
+				linkedin: linkedin,
+				portofolio: portofolio,
+				about: about,
+				accountNumber: accountNumber,
+				accountName: accountName,
+				rejectReason: null,
+			},
+		});
+
+		if (job || company) {
+			await prisma.experience.updateMany({
+				where: {
+					userId: id,
+					isCurrentJob: true,
+				},
+				data: {
+					jobTitle: job,
+					company: company,
+				},
+			});
+		}
+
+		// Update the experiences from the experiences array
+		if (experiences && experiences.length > 0) {
+			await prisma.experience.deleteMany({
+				where: {
+					userId: id,
+					isCurrentJob: false,
+				},
+			});
+
+			await prisma.experience.createMany({
+				data: experiences.map((experience) => {
+					return {
+						jobTitle: experience.role,
+						company: experience.experienceCompany,
+						userId: id,
+						isCurrentJob: false,
+					};
+				}),
+			});
+		}
+
+		// Return the new mentor information
+		res.json({
+			error: false,
+			message: 'Mentor registered successfully',
+		});
+	} catch (error) {
+		console.error('Error registering mentor:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
 
 // get mentor profile
 app.get('/mentors/:id/profile', async (req, res) => {
@@ -662,6 +748,7 @@ app.put('/class/:id', verifyToken, async (req, res) => {
 				name: name,
 				description: description,
 				terms: terms,
+				targetLearning: targetLearning,
 				price: price,
 				durationInDays: durationInDays,
 				startDate: new Date(startDate),
