@@ -369,7 +369,7 @@ app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 	}
 });
 // Register update mentor
-app.put('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
+app.patch('/users/mentor/:id/register-update', verifyToken, async (req, res) => {
 	try {
 		// Extract the mentor details from the request body
 		const userId = req.params.id;
