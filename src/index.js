@@ -1499,7 +1499,7 @@ app.post('/class/:id/learning-material', verifyToken, async (req, res) => {
 
 // Send Feedback
 app.post('/feedback', async (req, res) => {
-	const { evaluationId, menteeId, content } = req.body;
+	const { evaluationId, menteeId, content, result } = req.body;
 
 	try {
 		// Pastikan mentee dan evaluasi ada
@@ -1536,6 +1536,7 @@ app.post('/feedback', async (req, res) => {
 				evaluationId,
 				menteeId,
 				content,
+				result,
 			},
 		});
 

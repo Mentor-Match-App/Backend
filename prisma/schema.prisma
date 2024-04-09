@@ -123,6 +123,7 @@ model Feedback {
   evaluationId String @map("evaluation_id") @db.VarChar(64)
   menteeId     String @map("mentee_id") @db.VarChar(64)
   content      String @db.Text
+  result       Int    @default(0)
 
   evaluation Evaluation @relation(fields: [evaluationId], references: [id])
   mentee     User       @relation(fields: [menteeId], references: [id])

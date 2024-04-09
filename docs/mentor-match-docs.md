@@ -4,7 +4,7 @@
 
 ## Endpoint
 
-https://shy-lime-bream-cuff.cyclic.app
+https://backend-production-1a8a.up.railway.app
 
 ## Login User
 
