@@ -229,7 +229,7 @@ app.get('/session/filter-mentors', async (req, res) => {
 					? {
 							session: {
 								every: {
-									startDate: {
+									startTime: {
 										gt: new Date(),
 									},
 								},
