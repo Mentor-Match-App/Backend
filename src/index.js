@@ -251,13 +251,36 @@ app.get('/session/filter-mentors', async (req, res) => {
 					},
 				},
 				experiences: true,
+				mentorReviews: {
+					include: {
+						reviewer: {
+							select: {
+								name: true,
+							},
+						},
+					},
+				},
 			},
+		});
+
+		const adjustedMentors = mentors.map((mentor) => {
+			const mentorReviewsAdjusted = mentor.mentorReviews.map((review) => {
+				return {
+					...review,
+					reviewer: review.reviewer.name, // Mengubah `reviewer` menjadi string nama
+				};
+			});
+
+			return {
+				...mentor,
+				mentorReviews: mentorReviewsAdjusted,
+			};
 		});
 
 		res.json({
 			error: false,
 			message: 'Filtered mentors fetched successfully',
-			mentors: mentors,
+			mentors: adjustedMentors,
 		});
 	} catch (error) {
 		console.error('Error fetching filtered mentors:', error);
