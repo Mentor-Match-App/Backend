@@ -6,6 +6,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const cron = require('node-cron');
 const { DateTime } = require('luxon');
+const validUrl = require('valid-url');
+const axios = require('axios');
 
 // Express App Initialization
 
@@ -329,6 +331,31 @@ app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 			accountName,
 		} = req.body;
 
+		// Validate URL format
+		if (!validUrl.isUri(linkedin)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid linkedin URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(linkedin);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Linkedin link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
+
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: userId },
@@ -409,6 +436,31 @@ app.patch('/users/mentor/:id/register-update', verifyToken, async (req, res) => 
 			accountNumber,
 			accountName,
 		} = req.body;
+
+		// Validate URL format
+		if (!validUrl.isUri(linkedin)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid linkedin URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(linkedin);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Linkedin link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
 
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
@@ -507,6 +559,31 @@ app.patch('/mentors/:id/profile', verifyToken, async (req, res) => {
 		const id = req.params.id;
 		const { job, company, skills, location, about, linkedin, experiences } = req.body;
 
+		// Validate URL format
+		if (!validUrl.isUri(linkedin)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid linkedin URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(linkedin);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Linkedin is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
+
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: id },
@@ -577,6 +654,31 @@ app.patch('/mentees/:id/profile', verifyToken, async (req, res) => {
 	try {
 		const id = req.params.id;
 		const { job, company, skills, location, about, linkedin, experiences } = req.body;
+
+		// Validate URL format
+		if (!validUrl.isUri(linkedin)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid linkedin URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(linkedin);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Linkedin link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
 
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
@@ -1439,6 +1541,31 @@ app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
 		const classId = req.params.id;
 		const { topic, link } = req.body;
 
+		// Validate URL format
+		if (!validUrl.isUri(link)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(link);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
+
 		// Check if evaluation already exists for this topic
 		const existingEvaluation = await prisma.evaluation.findFirst({
 			where: {
@@ -1482,6 +1609,31 @@ app.post('/class/:id/learning-material', verifyToken, async (req, res) => {
 		// Extract the learning material details from the request body
 		const classId = req.params.id;
 		const { title, link } = req.body;
+
+		// Validate URL format
+		if (!validUrl.isUri(link)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(link);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
 
 		// Check if learning material already exists for this class
 		const existingMaterial = await prisma.learningMaterial.findFirst({
@@ -1729,6 +1881,31 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 		// Extract the class ID from the
 		const { classId, zoomLink } = req.body;
 
+		// Validate URL format
+		if (!validUrl.isUri(zoomLink)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(zoomLink);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
+
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
@@ -1856,6 +2033,31 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 	try {
 		// Extract the session ID and zoom link from the request body
 		const { sessionId, zoomLink } = req.body;
+
+		// Validate URL format
+		if (!validUrl.isUri(zoomLink)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(zoomLink);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
 
 		// Check if the session exists
 		const existingSession = await prisma.session.findUnique({
@@ -2264,6 +2466,31 @@ app.post('/admin/:id/create-community', verifyToken, async (req, res) => {
 		// Extract the community details from the request body
 		const userId = req.params.id;
 		const { name, link, imageUrl } = req.body;
+
+		// Validate URL format
+		if (!validUrl.isUri(link)) {
+			return res.status(400).json({
+				error: true,
+				message: 'Invalid URL format',
+			});
+		}
+
+		// Check link accessibility
+		try {
+			const response = await axios.head(link);
+			if (response.status !== 200) {
+				return res.status(400).json({
+					error: true,
+					message: 'Link is not accessible',
+				});
+			}
+		} catch (error) {
+			console.error('Error checking link accessibility:', error);
+			return res.status(400).json({
+				error: true,
+				message: 'Error checking link accessibility',
+			});
+		}
 
 		// Create a new community
 		const newCommunity = await prisma.community.create({
