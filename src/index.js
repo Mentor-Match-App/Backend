@@ -7,9 +7,6 @@ const prisma = new PrismaClient();
 const cron = require('node-cron');
 const { DateTime } = require('luxon');
 const validUrl = require('valid-url');
-const axios = require('axios');
-
-// Express App Initialization
 
 const app = express();
 const PORT = process.env.PORT;
@@ -339,23 +336,6 @@ app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 			});
 		}
 
-		// Check link accessibility
-		try {
-			const response = await axios.head(linkedin);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Linkedin link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
-			});
-		}
-
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: userId },
@@ -442,23 +422,6 @@ app.patch('/users/mentor/:id/register-update', verifyToken, async (req, res) => 
 			return res.status(400).json({
 				error: true,
 				message: 'Invalid linkedin URL format',
-			});
-		}
-
-		// Check link accessibility
-		try {
-			const response = await axios.head(linkedin);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Linkedin link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
 			});
 		}
 
@@ -567,23 +530,6 @@ app.patch('/mentors/:id/profile', verifyToken, async (req, res) => {
 			});
 		}
 
-		// Check link accessibility
-		try {
-			const response = await axios.head(linkedin);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Linkedin is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
-			});
-		}
-
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: id },
@@ -660,23 +606,6 @@ app.patch('/mentees/:id/profile', verifyToken, async (req, res) => {
 			return res.status(400).json({
 				error: true,
 				message: 'Invalid linkedin URL format',
-			});
-		}
-
-		// Check link accessibility
-		try {
-			const response = await axios.head(linkedin);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Linkedin link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
 			});
 		}
 
@@ -1549,23 +1478,6 @@ app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
 			});
 		}
 
-		// Check link accessibility
-		try {
-			const response = await axios.head(link);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
-			});
-		}
-
 		// Check if evaluation already exists for this topic
 		const existingEvaluation = await prisma.evaluation.findFirst({
 			where: {
@@ -1615,23 +1527,6 @@ app.post('/class/:id/learning-material', verifyToken, async (req, res) => {
 			return res.status(400).json({
 				error: true,
 				message: 'Invalid URL format',
-			});
-		}
-
-		// Check link accessibility
-		try {
-			const response = await axios.head(link);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
 			});
 		}
 
@@ -1889,23 +1784,6 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 			});
 		}
 
-		// Check link accessibility
-		try {
-			const response = await axios.head(zoomLink);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
-			});
-		}
-
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
@@ -2039,23 +1917,6 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			return res.status(400).json({
 				error: true,
 				message: 'Invalid URL format',
-			});
-		}
-
-		// Check link accessibility
-		try {
-			const response = await axios.head(zoomLink);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
 			});
 		}
 
@@ -2472,23 +2333,6 @@ app.post('/admin/:id/create-community', verifyToken, async (req, res) => {
 			return res.status(400).json({
 				error: true,
 				message: 'Invalid URL format',
-			});
-		}
-
-		// Check link accessibility
-		try {
-			const response = await axios.head(link);
-			if (response.status !== 200) {
-				return res.status(400).json({
-					error: true,
-					message: 'Link is not accessible',
-				});
-			}
-		} catch (error) {
-			console.error('Error checking link accessibility:', error);
-			return res.status(400).json({
-				error: true,
-				message: 'Error checking link accessibility',
 			});
 		}
 
