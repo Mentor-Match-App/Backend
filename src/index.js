@@ -4,7 +4,6 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const cron = require('node-cron');
 const { DateTime } = require('luxon');
 const validUrl = require('valid-url');
 
@@ -38,8 +37,6 @@ const verifyToken = (req, res, next) => {
 
 // firebase admin initialization
 const admin = require('firebase-admin');
-
-const fs = require('fs');
 
 const serviceAccount = {
 	type: 'service_account',
@@ -990,6 +987,17 @@ app.post('/class/:id/book', async (req, res) => {
 		const classId = req.params.id;
 		const { userId } = req.body;
 
+		const now = new Date();
+
+		// Expire transactions before proceeding
+		await prisma.transaction.updateMany({
+			where: {
+				expired: { lt: now },
+				paymentStatus: { notIn: ['Expired', 'Approved'] },
+			},
+			data: { paymentStatus: 'Expired' },
+		});
+
 		const newBooking = await prisma.$transaction(async (prisma) => {
 			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
 			if (!existingClass) {
@@ -1005,7 +1013,6 @@ app.post('/class/:id/book', async (req, res) => {
 				throw new Error('User not found');
 			}
 
-			// Mengecek apakah pengguna sudah memiliki transaksi untuk kelas ini
 			const existingTransaction = await prisma.transaction.findFirst({
 				where: {
 					userId: userId,
@@ -1014,7 +1021,6 @@ app.post('/class/:id/book', async (req, res) => {
 				},
 			});
 
-			// Menangani kasus berdasarkan status transaksi yang ditemukan
 			if (existingTransaction) {
 				if (existingTransaction.paymentStatus === 'Pending') {
 					throw new Error('You already have a pending booking for this class');
@@ -1054,7 +1060,6 @@ app.post('/class/:id/book', async (req, res) => {
 				}
 			}
 
-			// Jika jumlah peserta yang disetujui +1 sama dengan kapasitas, maka kelas tidak akan tersedia lagi
 			if (approvedBookingsCount + 1 == classCapacity) {
 				await prisma.class.update({ where: { id: classId }, data: { isAvailable: false } });
 			}
@@ -1064,78 +1069,21 @@ app.post('/class/:id/book', async (req, res) => {
 					classId,
 					userId,
 					uniqueCode,
-					// expired: new Date(Date.now() + 3 * 60 * 60 * 1000), // 60*1000 milliseconds = 1 menit
-					// make expired 24 hours
 					expired: new Date(Date.now() + 24 * 60 * 60 * 1000),
 				},
 			});
 		});
 
+		// Perbarui status semua kelas setelah pemesanan
+		await updateAllClassesStatus();
+
 		res.json({ error: false, message: 'Class booked successfully', booking: newBooking });
 	} catch (error) {
 		console.error('Error booking class:', error);
-		// Menyesuaikan status response berdasarkan pesan error
-		const statusCode = error.message.includes('pending') ? 409 : 400; // Contoh: 409 untuk konflik, 400 untuk permintaan buruk
+		const statusCode = error.message.includes('pending') ? 409 : 400;
 		res.status(statusCode).json({ error: true, message: error.message || 'Internal server error' });
 	}
 });
-
-cron.schedule('*/1 * * * *', async () => {
-	// Runs every minute
-	console.log('Checking for transactions to expire...');
-	await expireTransactions();
-	// Add call to updateClassAvailability if implemented
-});
-
-async function expireTransactions() {
-	const now = new Date();
-	const transactionsToExpire = await prisma.transaction.findMany({
-		where: {
-			expired: { lt: now },
-			paymentStatus: { notIn: ['Expired', 'Approved'] },
-		},
-		select: {
-			id: true,
-			classId: true,
-		},
-	});
-
-	if (transactionsToExpire.length > 0) {
-		await prisma.transaction.updateMany({
-			where: {
-				id: { in: transactionsToExpire.map((t) => t.id) },
-			},
-			data: { paymentStatus: 'Expired' },
-		});
-
-		for (const { classId } of transactionsToExpire) {
-			const approvedBookingsCount = await prisma.transaction.count({
-				where: {
-					classId: classId,
-					paymentStatus: 'Approved',
-				},
-			});
-
-			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
-			const classCapacity = existingClass.maxParticipants;
-
-			if (approvedBookingsCount < classCapacity) {
-				await prisma.class.update({
-					where: { id: classId },
-					data: { isAvailable: true },
-				});
-			}
-		}
-
-		console.log(
-			`Processed and expired ${transactionsToExpire.length} transactions, associated classes updated.`
-		);
-	} else {
-		console.log('No transactions to expire at this time.');
-	}
-}
-
-// Update all classes status
 
 async function updateAllClassesStatus() {
 	const allClasses = await prisma.class.findMany({
@@ -1217,13 +1165,6 @@ async function updateAllClassesStatus() {
 		}
 	}
 }
-
-// Memanggil fungsi untuk memperbarui semua kelas
-setInterval(() => {
-	updateAllClassesStatus()
-		.then(() => console.log('Semua status kelas diperbarui.'))
-		.catch((error) => console.error(error));
-}, 5000); // 5000 milidetik = 5 detik
 
 app.post('/mentee/:id/review', async (req, res) => {
 	try {
@@ -1369,11 +1310,9 @@ app.get('/session/:id', verifyToken, async (req, res) => {
 // book a session
 app.post('/session/:id/book', async (req, res) => {
 	try {
-		// Extract the session ID and user ID from the request body
 		const sessionId = req.params.id;
 		const { userId } = req.body;
 
-		// Check if the session exists
 		const existingSession = await prisma.session.findUnique({
 			where: { id: sessionId },
 		});
@@ -1382,7 +1321,6 @@ app.post('/session/:id/book', async (req, res) => {
 			return res.status(404).json({ error: true, message: 'Session not found' });
 		}
 
-		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: userId },
 		});
@@ -1391,7 +1329,6 @@ app.post('/session/:id/book', async (req, res) => {
 			return res.status(404).json({ error: true, message: 'User not found' });
 		}
 
-		// Check if the user has already booked the session
 		const existingBooking = await prisma.participant.findUnique({
 			where: {
 				sessionId_userId: {
@@ -1405,7 +1342,6 @@ app.post('/session/:id/book', async (req, res) => {
 			return res.status(400).json({ error: true, message: 'User has already booked this session' });
 		}
 
-		// Check if the session is already full
 		const participantCount = await prisma.participant.count({
 			where: { sessionId: sessionId },
 		});
@@ -1414,7 +1350,6 @@ app.post('/session/:id/book', async (req, res) => {
 			return res.status(400).json({ error: true, message: 'Session is already full' });
 		}
 
-		// Book the session
 		const newBooking = await prisma.participant.create({
 			data: {
 				sessionId: sessionId,
@@ -1422,7 +1357,9 @@ app.post('/session/:id/book', async (req, res) => {
 			},
 		});
 
-		// Return success response with the new booking information
+		// Perbarui status semua sesi setelah pemesanan
+		await updateAllSessionStatus();
+
 		res.json({
 			error: false,
 			message: 'Session booked successfully',
@@ -1433,8 +1370,6 @@ app.post('/session/:id/book', async (req, res) => {
 		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
-
-// update all session status when datetime pass and  startTime is passed (session is started)
 
 async function updateAllSessionStatus() {
 	const allSessions = await prisma.session.findMany({});
@@ -1455,13 +1390,6 @@ async function updateAllSessionStatus() {
 		}
 	}
 }
-
-// Memanggil fungsi untuk memperbarui semua sesi
-setInterval(() => {
-	updateAllSessionStatus()
-		.then(() => console.log('Semua status sesi diperbarui.'))
-		.catch((error) => console.error(error));
-}, 5000); // 5000 milidetik = 5 detik
 
 // Create Evaluation
 app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
@@ -1704,13 +1632,30 @@ app.get('/users/:id/my-class', async (req, res) => {
 
 // ***********************ADMIN***********************//
 
-// verify mentor
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 3000; // 3 seconds
+
+async function sendNotificationWithRetry(message, attempt = 1) {
+	try {
+		await admin.messaging().send(message);
+		console.log('Notification sent successfully');
+	} catch (error) {
+		if (attempt < MAX_RETRIES) {
+			console.error(`Attempt ${attempt} failed, retrying...`);
+			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+			await sendNotificationWithRetry(message, attempt + 1);
+		} else {
+			console.error('All retry attempts failed:', error);
+			throw error;
+		}
+	}
+}
+
+// Verify mentor
 app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 	try {
-		// Extract the mentor ID from the request body
 		const { mentorId } = req.body;
 
-		// Check if the mentor exists
 		const existingMentor = await prisma.user.findUnique({
 			where: { id: mentorId },
 		});
@@ -1719,13 +1664,29 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 			return res.status(404).json({ error: true, message: 'Mentor not found' });
 		}
 
-		// Verify the mentor
 		const updatedMentor = await prisma.user.update({
 			where: { id: mentorId },
 			data: { userType: 'Mentor' },
 		});
 
-		// Return success response with the updated mentor information
+		// Check if mentor has a valid FCM token
+		if (!existingMentor.fcmToken) {
+			return res
+				.status(400)
+				.json({ error: true, message: 'Mentor does not have a valid FCM token' });
+		}
+
+		// Send notification to the mentor
+		const message = {
+			notification: {
+				title: 'Verification Status',
+				body: 'You have been verified as a mentor!',
+			},
+			token: existingMentor.fcmToken,
+		};
+
+		await sendNotificationWithRetry(message);
+
 		res.json({
 			error: false,
 			message: 'Mentor verified successfully',
@@ -1740,10 +1701,8 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 // Reject mentor
 app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 	try {
-		// Extract the mentor ID and reject reason from the request body
 		const { mentorId, rejectReason } = req.body;
 
-		// Check if the mentor exists
 		const existingMentor = await prisma.user.findUnique({
 			where: { id: mentorId },
 		});
@@ -1752,13 +1711,29 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 			return res.status(404).json({ error: true, message: 'Mentor not found' });
 		}
 
-		// Reject the mentor and update the reject reason
 		const updatedMentor = await prisma.user.update({
 			where: { id: mentorId },
 			data: { userType: 'RejectedMentor', rejectReason: rejectReason },
 		});
 
-		// Return success response with the updated mentor information
+		// Check if mentor has a valid FCM token
+		if (!existingMentor.fcmToken) {
+			return res
+				.status(400)
+				.json({ error: true, message: 'Mentor does not have a valid FCM token' });
+		}
+
+		// Send notification to the mentor
+		const message = {
+			notification: {
+				title: 'Verification Status',
+				body: `You have been rejected as a mentor. Reason: ${rejectReason}`,
+			},
+			token: existingMentor.fcmToken, // Assuming you have FCM token stored
+		};
+
+		await admin.messaging().send(message);
+
 		res.json({
 			error: false,
 			message: 'Mentor rejected successfully',
@@ -2373,6 +2348,44 @@ app.get('/communities', async (req, res) => {
 	} catch (error) {
 		console.error('Error fetching communities:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+app.post('/save-token', async (req, res) => {
+	const { token, userId } = req.body;
+
+	if (!token || !userId) {
+		return res.status(400).json({ error: true, message: 'Token and userId are required' });
+	}
+
+	try {
+		await prisma.user.update({
+			where: { id: userId },
+			data: { fcmToken: token },
+		});
+
+		res.json({ error: false, message: 'Token saved successfully' });
+	} catch (error) {
+		console.error('Error saving token:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+app.post('/save-notification', async (req, res) => {
+	const { userId, title, content } = req.body;
+
+	try {
+		const notification = await prisma.notification.create({
+			data: {
+				userId: userId,
+				title: title,
+				content: content,
+			},
+		});
+		res.status(201).json(notification);
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: error.message });
 	}
 });
 
