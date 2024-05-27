@@ -998,19 +998,19 @@ app.post('/class/:id/book', async (req, res) => {
 			data: { paymentStatus: 'Expired' },
 		});
 
-		const newBooking = await prisma.$transaction(async (prisma) => {
+		const result = await prisma.$transaction(async (prisma) => {
 			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
 			if (!existingClass) {
-				throw new Error('Class not found');
+				return { error: true, message: 'Class not found' };
 			}
 
 			if (!existingClass.isAvailable) {
-				throw new Error('Class not available for booking');
+				return { error: true, message: 'Class not available for booking' };
 			}
 
 			const existingUser = await prisma.user.findUnique({ where: { id: userId } });
 			if (!existingUser) {
-				throw new Error('User not found');
+				return { error: true, message: 'User not found' };
 			}
 
 			const existingTransaction = await prisma.transaction.findFirst({
@@ -1023,9 +1023,9 @@ app.post('/class/:id/book', async (req, res) => {
 
 			if (existingTransaction) {
 				if (existingTransaction.paymentStatus === 'Pending') {
-					throw new Error('You already have a pending booking for this class');
+					return { error: true, message: 'You already have a pending booking for this class' };
 				} else if (existingTransaction.paymentStatus === 'Approved') {
-					throw new Error('You have already booked this class');
+					return { error: true, message: 'You have already booked this class' };
 				}
 			}
 
@@ -1046,7 +1046,7 @@ app.post('/class/:id/book', async (req, res) => {
 			const classCapacity = existingClass.maxParticipants;
 
 			if (approvedBookingsCount + pendingBookingsCount >= classCapacity) {
-				throw new Error('Class is fully booked');
+				return { error: true, message: 'Class is fully booked' };
 			}
 
 			let uniqueCode = generateUniqueCode();
@@ -1064,7 +1064,7 @@ app.post('/class/:id/book', async (req, res) => {
 				await prisma.class.update({ where: { id: classId }, data: { isAvailable: false } });
 			}
 
-			return prisma.transaction.create({
+			const newBooking = await prisma.transaction.create({
 				data: {
 					classId,
 					userId,
@@ -1072,16 +1072,23 @@ app.post('/class/:id/book', async (req, res) => {
 					expired: new Date(Date.now() + 24 * 60 * 60 * 1000),
 				},
 			});
+
+			return { error: false, booking: newBooking };
 		});
+
+		// Handle transaction results
+		if (result.error) {
+			const statusCode = result.message.includes('pending') ? 409 : 400;
+			return res.status(statusCode).json(result);
+		}
 
 		// Perbarui status semua kelas setelah pemesanan
 		await updateAllClassesStatus();
 
-		res.json({ error: false, message: 'Class booked successfully', booking: newBooking });
+		res.json({ error: false, message: 'Class booked successfully', booking: result.booking });
 	} catch (error) {
 		console.error('Error booking class:', error);
-		const statusCode = error.message.includes('pending') ? 409 : 400;
-		res.status(statusCode).json({ error: true, message: error.message || 'Internal server error' });
+		res.status(500).json({ error: true, message: 'Internal server error' });
 	}
 });
 
@@ -1549,7 +1556,6 @@ app.post('/feedback', async (req, res) => {
 });
 
 // Get my class and session list
-
 app.get('/users/:id/my-class', async (req, res) => {
 	try {
 		const userId = req.params.id;
@@ -1732,7 +1738,7 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 			token: existingMentor.fcmToken, // Assuming you have FCM token stored
 		};
 
-		await admin.messaging().send(message);
+		await sendNotificationWithRetry(message);
 
 		res.json({
 			error: false,
@@ -1762,6 +1768,7 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
+			include: { mentor: true }, // Menggunakan include untuk mengambil informasi mentor
 		});
 
 		if (!existingClass) {
@@ -1773,6 +1780,17 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 			where: { id: classId },
 			data: { isVerified: true, isAvailable: true, zoomLink: zoomLink },
 		});
+
+		// Send notification using FCM
+		const message = {
+			notification: {
+				title: 'Class Verification',
+				body: 'Your class has been verified and the Zoom link has been added!',
+			},
+			token: existingClass.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field
+		};
+
+		await sendNotificationWithRetry(message);
 
 		// Return success response with the updated class information
 		res.json({
@@ -1786,6 +1804,7 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 	}
 });
 
+// reject class
 app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 	try {
 		// Extract the class ID and reject reason from the request body
@@ -1794,6 +1813,7 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
+			include: { mentor: true }, // Menggunakan include untuk mengambil informasi mentor
 		});
 
 		if (!existingClass) {
@@ -1805,6 +1825,17 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 			where: { id: classId },
 			data: { rejectReason: rejectReason }, // Assume you use `isActive` to indicate class status
 		});
+
+		// Send notification using FCM
+		const message = {
+			notification: {
+				title: 'Class Verification',
+				body: `Your class has been rejected. Reason: ${rejectReason}`,
+			},
+			token: existingClass.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field
+		};
+
+		await sendNotificationWithRetry(message);
 
 		// Return success response
 		res.json({
@@ -1827,6 +1858,7 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 		// Check if the transaction exists
 		const existingTransaction = await prisma.transaction.findUnique({
 			where: { id: transactionId },
+			include: { User: true, class: true }, // Include to fetch user details and class details
 		});
 
 		if (!existingTransaction) {
@@ -1838,6 +1870,17 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 			where: { id: transactionId },
 			data: { paymentStatus: 'Approved' },
 		});
+
+		// Send notification using FCM
+		const message = {
+			notification: {
+				title: 'Transaction Verification',
+				body: `Your transaction for ${existingTransaction.class.name} has been verified successfully!`,
+			},
+			token: existingTransaction.User.fcmToken, // Assuming mentee's FCM token is stored in the 'fcmToken' field of User
+		};
+
+		await sendNotificationWithRetry(message);
 
 		res.json({
 			error: false,
@@ -1858,6 +1901,7 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 		// Check if the transaction exists
 		const existingTransaction = await prisma.transaction.findUnique({
 			where: { id: transactionId },
+			include: { User: true, class: true }, // Include to fetch user details and class details
 		});
 
 		if (!existingTransaction) {
@@ -1869,6 +1913,17 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 			where: { id: transactionId },
 			data: { paymentStatus: 'Rejected' },
 		});
+
+		// Send notification using FCM
+		const message = {
+			notification: {
+				title: 'Transaction Rejection',
+				body: `Your transaction for ${existingTransaction.class.name} has been rejected.`,
+			},
+			token: existingTransaction.User.fcmToken, // Assuming mentee's FCM token is stored in the 'fcmToken' field of User
+		};
+
+		await sendNotificationWithRetry(message);
 
 		res.json({
 			error: false,
@@ -1898,6 +1953,14 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 		// Check if the session exists
 		const existingSession = await prisma.session.findUnique({
 			where: { id: sessionId },
+			include: {
+				mentor: true,
+				participant: {
+					include: {
+						user: true, // Include user to fetch fcmToken
+					},
+				},
+			},
 		});
 
 		if (!existingSession) {
@@ -1909,6 +1972,30 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			where: { id: sessionId },
 			data: { zoomLink: zoomLink },
 		});
+
+		// Send notification using FCM to mentor
+		const mentorMessage = {
+			notification: {
+				title: 'Zoom Link Added',
+				body: `Zoom link has been added to the session ${existingSession.title}.`,
+			},
+			token: existingSession.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field of User
+		};
+
+		await sendNotificationWithRetry(mentorMessage);
+
+		// Send notification using FCM to all participants
+		for (const participant of existingSession.participant) {
+			const participantMessage = {
+				notification: {
+					title: 'Zoom Link Added',
+					body: `Zoom link has been added to the session ${existingSession.title}.`,
+				},
+				token: participant.user.fcmToken, // Assuming participant's FCM token is stored in the 'fcmToken' field of User
+			};
+
+			await sendNotificationWithRetry(participantMessage);
+		}
 
 		// Return success response with the updated session information
 		res.json({
