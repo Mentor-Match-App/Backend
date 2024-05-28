@@ -49,7 +49,7 @@ model User {
   accountName   String?        @map("account_name") @db.VarChar(64)
   Feedback      Feedback[]
   rejectReason  String?        @map("reject_reason") @db.VarChar(255)
-  fcmToken      String?         @db.VarChar(255)
+  fcmToken      String?        @db.VarChar(255)
   notification  Notification[]
 
   @@map("users")

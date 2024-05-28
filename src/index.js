@@ -2476,6 +2476,44 @@ app.post('/save-notification', async (req, res) => {
 	}
 });
 
+// Get notifications by user ID
+app.get('/notifications/:userId', verifyToken, async (req, res) => {
+	try {
+		const notifications = await prisma.notification.findMany({
+			where: { userId: req.params.userId },
+			orderBy: { createdAt: 'desc' },
+		});
+
+		res.json({
+			error: false,
+			message: 'Notifications fetched successfully',
+			notifications: notifications,
+		});
+	} catch (error) {
+		console.error('Error fetching notifications:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
+// Update notification status
+app.patch('/notifications/:id', verifyToken, async (req, res) => {
+	try {
+		const notification = await prisma.notification.update({
+			where: { id: req.params.id },
+			data: { isRead: true },
+		});
+
+		res.json({
+			error: false,
+			message: 'Notification status updated successfully',
+			notification: notification,
+		});
+	} catch (error) {
+		console.error('Error updating notification status:', error);
+		res.status(500).json({ error: true, message: 'Internal server error' });
+	}
+});
+
 // **************************END**********************//
 
 // Landing page
