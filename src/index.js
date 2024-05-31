@@ -1896,7 +1896,7 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 // reject mentee transaction
 app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 	try {
-		const { transactionId } = req.body;
+		const { transactionId, rejectReason } = req.body;
 
 		// Check if the transaction exists
 		const existingTransaction = await prisma.transaction.findUnique({
@@ -1911,14 +1911,14 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 		// Reject the transaction
 		const updatedTransaction = await prisma.transaction.update({
 			where: { id: transactionId },
-			data: { paymentStatus: 'Rejected' },
+			data: { paymentStatus: 'Rejected', rejectReason: rejectReason },
 		});
 
 		// Send notification using FCM
 		const message = {
 			notification: {
 				title: 'Transaction Rejection',
-				body: `Your transaction for ${existingTransaction.class.name} has been rejected.`,
+				body: `Your transaction for ${existingTransaction.class.name} has been rejected. Reason: ${rejectReason}`,
 			},
 			token: existingTransaction.User.fcmToken, // Assuming mentee's FCM token is stored in the 'fcmToken' field of User
 		};

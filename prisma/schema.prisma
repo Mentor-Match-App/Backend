@@ -194,6 +194,7 @@ model Transaction {
   expired       DateTime      @default(dbgenerated("NOW() + interval '1 day'"))
   User          User          @relation(fields: [userId], references: [id])
   userId        String        @db.VarChar(64)
+  rejectReason  String?       @map("reject_reason") @db.VarChar(255)
 
   @@map("transactions")
 }
