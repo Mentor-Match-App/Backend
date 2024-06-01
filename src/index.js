@@ -1693,6 +1693,15 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(message);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: mentorId,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
+
 		res.json({
 			error: false,
 			message: 'Mentor verified successfully',
@@ -1740,6 +1749,14 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(message);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: mentorId,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
 		res.json({
 			error: false,
 			message: 'Mentor rejected successfully',
@@ -1792,6 +1809,15 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(message);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: existingClass.mentor.id,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
+
 		// Return success response with the updated class information
 		res.json({
 			error: false,
@@ -1836,6 +1862,15 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 		};
 
 		await sendNotificationWithRetry(message);
+
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: existingClass.mentor.id,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
 
 		// Return success response
 		res.json({
@@ -1882,6 +1917,15 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(message);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: existingTransaction.userId,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
+
 		res.json({
 			error: false,
 			message: 'Transaction verified successfully',
@@ -1925,6 +1969,14 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(message);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: existingTransaction.userId,
+				title: message.notification.title,
+				body: message.notification.body,
+			},
+		});
 		res.json({
 			error: false,
 			message: 'Transaction rejected successfully',
@@ -1984,6 +2036,15 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 
 		await sendNotificationWithRetry(mentorMessage);
 
+		// Save notification to the database
+		await prisma.notification.create({
+			data: {
+				userId: existingSession.mentor.id,
+				title: mentorMessage.notification.title,
+				body: mentorMessage.notification.body,
+			},
+		});
+
 		// Send notification using FCM to all participants
 		for (const participant of existingSession.participant) {
 			const participantMessage = {
@@ -1995,6 +2056,15 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			};
 
 			await sendNotificationWithRetry(participantMessage);
+
+			// Save notification to the database
+			await prisma.notification.create({
+				data: {
+					userId: participant.user.id,
+					title: participantMessage.notification.title,
+					body: participantMessage.notification.body,
+				},
+			});
 		}
 
 		// Return success response with the updated session information
@@ -2455,24 +2525,6 @@ app.post('/save-token', async (req, res) => {
 	} catch (error) {
 		console.error('Error saving token:', error);
 		res.status(500).json({ error: true, message: 'Internal server error' });
-	}
-});
-
-app.post('/save-notification', async (req, res) => {
-	const { userId, title, content } = req.body;
-
-	try {
-		const notification = await prisma.notification.create({
-			data: {
-				userId: userId,
-				title: title,
-				content: content,
-			},
-		});
-		res.status(201).json(notification);
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ error: error.message });
 	}
 });
 
