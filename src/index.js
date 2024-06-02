@@ -1698,7 +1698,7 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 			data: {
 				userId: mentorId,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 
@@ -1754,7 +1754,7 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 			data: {
 				userId: mentorId,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 		res.json({
@@ -1814,7 +1814,7 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 			data: {
 				userId: existingClass.mentor.id,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 
@@ -1868,7 +1868,7 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 			data: {
 				userId: existingClass.mentor.id,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 
@@ -1922,7 +1922,7 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 			data: {
 				userId: existingTransaction.userId,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 
@@ -1974,7 +1974,7 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 			data: {
 				userId: existingTransaction.userId,
 				title: message.notification.title,
-				body: message.notification.body,
+				content: message.notification.body,
 			},
 		});
 		res.json({
@@ -2041,7 +2041,7 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			data: {
 				userId: existingSession.mentor.id,
 				title: mentorMessage.notification.title,
-				body: mentorMessage.notification.body,
+				content: mentorMessage.notification.body,
 			},
 		});
 
@@ -2062,7 +2062,7 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 				data: {
 					userId: participant.user.id,
 					title: participantMessage.notification.title,
-					body: participantMessage.notification.body,
+					content: participantMessage.notification.body,
 				},
 			});
 		}
