@@ -1675,14 +1675,7 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 			data: { userType: 'Mentor' },
 		});
 
-		// Check if mentor has a valid FCM token
-		if (!existingMentor.fcmToken) {
-			return res
-				.status(400)
-				.json({ error: true, message: 'Mentor does not have a valid FCM token' });
-		}
-
-		// Send notification to the mentor
+		// Prepare the notification message
 		const message = {
 			notification: {
 				title: 'Verification Status',
@@ -1691,7 +1684,13 @@ app.patch('/admin/verify-mentor', verifyToken, async (req, res) => {
 			token: existingMentor.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		// Check if mentor has a valid FCM token
+		if (existingMentor.fcmToken) {
+			// Send notification to the mentor
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('Mentor does not have a valid FCM token. Skipping push notification.');
+		}
 
 		// Save notification to the database
 		await prisma.notification.create({
@@ -1731,23 +1730,22 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 			data: { userType: 'RejectedMentor', rejectReason: rejectReason },
 		});
 
-		// Check if mentor has a valid FCM token
-		if (!existingMentor.fcmToken) {
-			return res
-				.status(400)
-				.json({ error: true, message: 'Mentor does not have a valid FCM token' });
-		}
-
-		// Send notification to the mentor
+		// Prepare the notification message
 		const message = {
 			notification: {
 				title: 'Verification Status',
 				body: `You have been rejected as a mentor. Reason: ${rejectReason}`,
 			},
-			token: existingMentor.fcmToken, // Assuming you have FCM token stored
+			token: existingMentor.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		// Check if mentor has a valid FCM token
+		if (existingMentor.fcmToken) {
+			// Send notification to the mentor
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('Mentor does not have a valid FCM token. Skipping push notification.');
+		}
 
 		// Save notification to the database
 		await prisma.notification.create({
@@ -1757,6 +1755,7 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 				content: message.notification.body,
 			},
 		});
+
 		res.json({
 			error: false,
 			message: 'Mentor rejected successfully',
@@ -1771,7 +1770,6 @@ app.patch('/admin/reject-mentor', verifyToken, async (req, res) => {
 // verify class and send link zoom
 app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 	try {
-		// Extract the class ID from the
 		const { classId, zoomLink } = req.body;
 
 		// Validate URL format
@@ -1785,7 +1783,7 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
-			include: { mentor: true }, // Menggunakan include untuk mengambil informasi mentor
+			include: { mentor: true },
 		});
 
 		if (!existingClass) {
@@ -1798,18 +1796,20 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 			data: { isVerified: true, isAvailable: true, zoomLink: zoomLink },
 		});
 
-		// Send notification using FCM
 		const message = {
 			notification: {
 				title: 'Class Verification',
 				body: 'Your class has been verified and the Zoom link has been added!',
 			},
-			token: existingClass.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field
+			token: existingClass.mentor.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		if (existingClass.mentor.fcmToken) {
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('Mentor does not have a valid FCM token. Skipping push notification.');
+		}
 
-		// Save notification to the database
 		await prisma.notification.create({
 			data: {
 				userId: existingClass.mentor.id,
@@ -1818,7 +1818,6 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 			},
 		});
 
-		// Return success response with the updated class information
 		res.json({
 			error: false,
 			message: 'Class verified successfully',
@@ -1833,13 +1832,12 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 // reject class
 app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 	try {
-		// Extract the class ID and reject reason from the request body
 		const { classId, rejectReason } = req.body;
 
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
 			where: { id: classId },
-			include: { mentor: true }, // Menggunakan include untuk mengambil informasi mentor
+			include: { mentor: true },
 		});
 
 		if (!existingClass) {
@@ -1849,21 +1847,23 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 		// Update the class to mark it as rejected and store the reject reason
 		const updatedClass = await prisma.class.update({
 			where: { id: classId },
-			data: { rejectReason: rejectReason }, // Assume you use `isActive` to indicate class status
+			data: { rejectReason: rejectReason },
 		});
 
-		// Send notification using FCM
 		const message = {
 			notification: {
 				title: 'Class Verification',
 				body: `Your class has been rejected. Reason: ${rejectReason}`,
 			},
-			token: existingClass.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field
+			token: existingClass.mentor.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		if (existingClass.mentor.fcmToken) {
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('Mentor does not have a valid FCM token. Skipping push notification.');
+		}
 
-		// Save notification to the database
 		await prisma.notification.create({
 			data: {
 				userId: existingClass.mentor.id,
@@ -1872,7 +1872,6 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 			},
 		});
 
-		// Return success response
 		res.json({
 			error: false,
 			message: 'Class rejected successfully',
@@ -1887,13 +1886,12 @@ app.patch('/admin/reject-class', verifyToken, async (req, res) => {
 // verify mentee transaction
 app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 	try {
-		// Extract the transaction ID from the request body
 		const { transactionId } = req.body;
 
 		// Check if the transaction exists
 		const existingTransaction = await prisma.transaction.findUnique({
 			where: { id: transactionId },
-			include: { User: true, class: true }, // Include to fetch user details and class details
+			include: { User: true, class: true },
 		});
 
 		if (!existingTransaction) {
@@ -1906,18 +1904,20 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 			data: { paymentStatus: 'Approved' },
 		});
 
-		// Send notification using FCM
 		const message = {
 			notification: {
 				title: 'Transaction Verification',
 				body: `Your transaction for ${existingTransaction.class.name} has been verified successfully!`,
 			},
-			token: existingTransaction.User.fcmToken, // Assuming mentee's FCM token is stored in the 'fcmToken' field of User
+			token: existingTransaction.User.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		if (existingTransaction.User.fcmToken) {
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('User does not have a valid FCM token. Skipping push notification.');
+		}
 
-		// Save notification to the database
 		await prisma.notification.create({
 			data: {
 				userId: existingTransaction.userId,
@@ -1945,7 +1945,7 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 		// Check if the transaction exists
 		const existingTransaction = await prisma.transaction.findUnique({
 			where: { id: transactionId },
-			include: { User: true, class: true }, // Include to fetch user details and class details
+			include: { User: true, class: true },
 		});
 
 		if (!existingTransaction) {
@@ -1958,18 +1958,20 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 			data: { paymentStatus: 'Rejected', rejectReason: rejectReason },
 		});
 
-		// Send notification using FCM
 		const message = {
 			notification: {
 				title: 'Transaction Rejection',
 				body: `Your transaction for ${existingTransaction.class.name} has been rejected. Reason: ${rejectReason}`,
 			},
-			token: existingTransaction.User.fcmToken, // Assuming mentee's FCM token is stored in the 'fcmToken' field of User
+			token: existingTransaction.User.fcmToken,
 		};
 
-		await sendNotificationWithRetry(message);
+		if (existingTransaction.User.fcmToken) {
+			await sendNotificationWithRetry(message);
+		} else {
+			console.warn('User does not have a valid FCM token. Skipping push notification.');
+		}
 
-		// Save notification to the database
 		await prisma.notification.create({
 			data: {
 				userId: existingTransaction.userId,
@@ -1977,6 +1979,7 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 				content: message.notification.body,
 			},
 		});
+
 		res.json({
 			error: false,
 			message: 'Transaction rejected successfully',
@@ -1991,7 +1994,6 @@ app.patch('/admin/reject-transaction', verifyToken, async (req, res) => {
 // add zoom link to session
 app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 	try {
-		// Extract the session ID and zoom link from the request body
 		const { sessionId, zoomLink } = req.body;
 
 		// Validate URL format
@@ -2009,7 +2011,7 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 				mentor: true,
 				participant: {
 					include: {
-						user: true, // Include user to fetch fcmToken
+						user: true,
 					},
 				},
 			},
@@ -2025,18 +2027,20 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			data: { zoomLink: zoomLink },
 		});
 
-		// Send notification using FCM to mentor
 		const mentorMessage = {
 			notification: {
 				title: 'Zoom Link Added',
 				body: `Zoom link has been added to the session ${existingSession.title}.`,
 			},
-			token: existingSession.mentor.fcmToken, // Assuming mentor's FCM token is stored in the 'fcmToken' field of User
+			token: existingSession.mentor.fcmToken,
 		};
 
-		await sendNotificationWithRetry(mentorMessage);
+		if (existingSession.mentor.fcmToken) {
+			await sendNotificationWithRetry(mentorMessage);
+		} else {
+			console.warn('Mentor does not have a valid FCM token. Skipping push notification.');
+		}
 
-		// Save notification to the database
 		await prisma.notification.create({
 			data: {
 				userId: existingSession.mentor.id,
@@ -2045,19 +2049,23 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			},
 		});
 
-		// Send notification using FCM to all participants
 		for (const participant of existingSession.participant) {
 			const participantMessage = {
 				notification: {
 					title: 'Zoom Link Added',
 					body: `Zoom link has been added to the session ${existingSession.title}.`,
 				},
-				token: participant.user.fcmToken, // Assuming participant's FCM token is stored in the 'fcmToken' field of User
+				token: participant.user.fcmToken,
 			};
 
-			await sendNotificationWithRetry(participantMessage);
+			if (participant.user.fcmToken) {
+				await sendNotificationWithRetry(participantMessage);
+			} else {
+				console.warn(
+					`Participant ${participant.user.id} does not have a valid FCM token. Skipping push notification.`
+				);
+			}
 
-			// Save notification to the database
 			await prisma.notification.create({
 				data: {
 					userId: participant.user.id,
@@ -2067,7 +2075,6 @@ app.patch('/admin/add-zoom-link-session', verifyToken, async (req, res) => {
 			});
 		}
 
-		// Return success response with the updated session information
 		res.json({
 			error: false,
 			message: 'Zoom link added successfully',
