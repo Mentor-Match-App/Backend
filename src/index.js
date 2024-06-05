@@ -373,11 +373,17 @@ app.patch('/users/mentor/:id/register', verifyToken, async (req, res) => {
 
 		// create a new experience from the experiences array
 		if (experiences && experiences.length > 0) {
+			await prisma.experience.deleteMany({
+				where: {
+					userId: userId,
+					isCurrentJob: false,
+				},
+			});
 			await prisma.experience.createMany({
 				data: experiences.map((experience) => {
 					return {
 						jobTitle: experience.role,
-						company: experience.company,
+						company: experience.experienceCompany,
 						userId: userId,
 						isCurrentJob: false,
 					};
