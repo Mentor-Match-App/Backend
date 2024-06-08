@@ -2105,7 +2105,7 @@ app.get('/admin/unverified-class', async (req, res) => {
 				rejectReason: null,
 
 				startDate: {
-					gt: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000),
+					gt: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000),
 				},
 			},
 			include: {
