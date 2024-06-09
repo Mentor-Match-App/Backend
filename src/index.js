@@ -2103,10 +2103,6 @@ app.get('/admin/unverified-class', async (req, res) => {
 			where: {
 				isVerified: false,
 				rejectReason: null,
-
-				startDate: {
-					gt: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000),
-				},
 			},
 			include: {
 				mentor: {
