@@ -1918,12 +1918,6 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 			token: existingTransaction.User.fcmToken,
 		};
 
-		if (existingTransaction.User.fcmToken) {
-			await sendNotificationWithRetry(message);
-		} else {
-			console.warn('User does not have a valid FCM token. Skipping push notification.');
-		}
-
 		await prisma.notification.create({
 			data: {
 				userId: existingTransaction.userId,
@@ -1931,6 +1925,25 @@ app.patch('/admin/verify-transaction', verifyToken, async (req, res) => {
 				content: message.notification.body,
 			},
 		});
+
+		if (existingTransaction.User.fcmToken) {
+			try {
+				await sendNotificationWithRetry(message);
+			} catch (error) {
+				if (error.code === 'messaging/registration-token-not-registered') {
+					console.warn("User's FCM token is not registered. Skipping push notification.");
+					// Optionally, you can update the user's FCM token to null in the database
+					await prisma.user.update({
+						where: { id: existingTransaction.userId },
+						data: { fcmToken: null },
+					});
+				} else {
+					throw error; // Re-throw if it's not a specific error we are handling
+				}
+			}
+		} else {
+			console.warn('User does not have a valid FCM token. Skipping push notification.');
+		}
 
 		res.json({
 			error: false,
