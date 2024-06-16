@@ -14,7 +14,12 @@ dotenv.config();
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+app.use(
+	cors({
+		origin: '*', //
+		credentials: false,
+	})
+);
 
 // Middleware for token verification
 const verifyToken = (req, res, next) => {
