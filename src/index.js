@@ -16,7 +16,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
 	cors({
-		origin: 'https://backend-production-1a8a.up.railway.app/', //
+		origin: 'https://backend-production-1a8a.up.railway.app', //
 	})
 );
 
