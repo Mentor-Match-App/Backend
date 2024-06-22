@@ -1858,12 +1858,12 @@ app.patch('/admin/verify-class', verifyToken, async (req, res) => {
 		const { classId, zoomLink } = req.body;
 
 		// Validate URL format
-		if (!validUrl.isUri(zoomLink)) {
-			return res.status(400).json({
-				error: true,
-				message: 'Invalid URL format',
-			});
-		}
+		// if (!validUrl.isUri(zoomLink)) {
+		// 	return res.status(400).json({
+		// 		error: true,
+		// 		message: 'Invalid URL format',
+		// 	});
+		// }
 
 		// Check if the class exists
 		const existingClass = await prisma.class.findUnique({
