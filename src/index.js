@@ -6,6 +6,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { DateTime } = require('luxon');
 const validUrl = require('valid-url');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT;
@@ -157,9 +158,9 @@ app.get('/class/filter-mentors', async (req, res) => {
 				userType: 'Mentor',
 				class: {
 					every: {
-						startDate: {
-							gt: new Date(),
-						},
+						// startDate: {
+						// 	gt: new Date(), // Filter kelas yang belum dimulai
+						// },
 					},
 					some: {
 						isVerified: true,
@@ -998,32 +999,22 @@ app.post('/class/:id/book', async (req, res) => {
 		const classId = req.params.id;
 		const { userId } = req.body;
 
-		const now = new Date();
-
-		// Expire transactions before proceeding
-		await prisma.transaction.updateMany({
-			where: {
-				expired: { lt: now },
-				paymentStatus: { notIn: ['Expired', 'Approved'] },
-			},
-			data: { paymentStatus: 'Expired' },
-		});
-
-		const result = await prisma.$transaction(async (prisma) => {
+		const newBooking = await prisma.$transaction(async (prisma) => {
 			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
 			if (!existingClass) {
-				return { error: true, message: 'Class not found' };
+				throw new Error('Class not found');
 			}
 
 			if (!existingClass.isAvailable) {
-				return { error: true, message: 'Class not available for booking' };
+				throw new Error('Class not available for booking');
 			}
 
 			const existingUser = await prisma.user.findUnique({ where: { id: userId } });
 			if (!existingUser) {
-				return { error: true, message: 'User not found' };
+				throw new Error('User not found');
 			}
 
+			// Mengecek apakah pengguna sudah memiliki transaksi untuk kelas ini
 			const existingTransaction = await prisma.transaction.findFirst({
 				where: {
 					userId: userId,
@@ -1032,11 +1023,12 @@ app.post('/class/:id/book', async (req, res) => {
 				},
 			});
 
+			// Menangani kasus berdasarkan status transaksi yang ditemukan
 			if (existingTransaction) {
 				if (existingTransaction.paymentStatus === 'Pending') {
-					return { error: true, message: 'You already have a pending booking for this class' };
+					throw new Error('You already have a pending booking for this class');
 				} else if (existingTransaction.paymentStatus === 'Approved') {
-					return { error: true, message: 'You have already booked this class' };
+					throw new Error('You have already booked this class');
 				}
 			}
 
@@ -1057,7 +1049,7 @@ app.post('/class/:id/book', async (req, res) => {
 			const classCapacity = existingClass.maxParticipants;
 
 			if (approvedBookingsCount + pendingBookingsCount >= classCapacity) {
-				return { error: true, message: 'Class is fully booked' };
+				throw new Error('Class is fully booked');
 			}
 
 			let uniqueCode = generateUniqueCode();
@@ -1071,35 +1063,32 @@ app.post('/class/:id/book', async (req, res) => {
 				}
 			}
 
+			// Jika jumlah peserta yang disetujui +1 sama dengan kapasitas, maka kelas tidak akan tersedia lagi
 			if (approvedBookingsCount + 1 == classCapacity) {
 				await prisma.class.update({ where: { id: classId }, data: { isAvailable: false } });
 			}
 
-			const newBooking = await prisma.transaction.create({
+			return prisma.transaction.create({
 				data: {
 					classId,
 					userId,
 					uniqueCode,
+					// expired: new Date(Date.now() + 3 * 60 * 60 * 1000), // 60*1000 milliseconds = 1 menit
+					// make expired 24 hours
 					expired: new Date(Date.now() + 24 * 60 * 60 * 1000),
 				},
 			});
-
-			return { error: false, booking: newBooking };
 		});
 
-		// Handle transaction results
-		if (result.error) {
-			const statusCode = result.message.includes('pending') ? 409 : 400;
-			return res.status(statusCode).json(result);
-		}
-
-		// Perbarui status semua kelas setelah pemesanan
 		await updateAllClassesStatus();
+		await expireTransactions();
 
-		res.json({ error: false, message: 'Class booked successfully', booking: result.booking });
+		res.json({ error: false, message: 'Class booked successfully', booking: newBooking });
 	} catch (error) {
 		console.error('Error booking class:', error);
-		res.status(500).json({ error: true, message: 'Internal server error' });
+		// Menyesuaikan status response berdasarkan pesan error
+		const statusCode = error.message.includes('pending') ? 409 : 400; // Contoh: 409 untuk konflik, 400 untuk permintaan buruk
+		res.status(statusCode).json({ error: true, message: error.message || 'Internal server error' });
 	}
 });
 
@@ -1183,6 +1172,77 @@ async function updateAllClassesStatus() {
 		}
 	}
 }
+
+async function expireTransactions() {
+	const now = new Date();
+	const transactionsToExpire = await prisma.transaction.findMany({
+		where: {
+			expired: { lt: now }, // Mengambil transaksi yang sudah kadaluarsa
+			paymentStatus: { notIn: ['Expired', 'Approved'] }, // Memastikan transaksi belum kadaluarsa atau disetujui
+		},
+		select: {
+			id: true,
+			classId: true,
+		},
+	});
+
+	if (transactionsToExpire.length > 0) {
+		await prisma.transaction.updateMany({
+			where: {
+				id: { in: transactionsToExpire.map((t) => t.id) },
+			},
+			data: { paymentStatus: 'Expired' },
+		});
+
+		for (const { classId } of transactionsToExpire) {
+			const approvedBookingsCount = await prisma.transaction.count({
+				where: {
+					classId: classId,
+					paymentStatus: 'Approved',
+				},
+			});
+
+			const pendingBookingsCount = await prisma.transaction.count({
+				where: {
+					classId: classId,
+					paymentStatus: 'Pending',
+				},
+			});
+
+			const approvedPendingBookingsCount = approvedBookingsCount + pendingBookingsCount;
+
+			const existingClass = await prisma.class.findUnique({ where: { id: classId } });
+			const classCapacity = existingClass.maxParticipants;
+
+			if (approvedPendingBookingsCount < classCapacity) {
+				await prisma.class.update({
+					where: { id: classId },
+					data: { isAvailable: true },
+				});
+			}
+		}
+
+		console.log(
+			`Processed and expired ${transactionsToExpire.length} transactions, associated classes updated.`
+		);
+	} else {
+		console.log('No transactions to expire at this time.');
+	}
+}
+
+cron.schedule('0 0 * * *', () => {
+	updateAllClassesStatus()
+		.then(() => console.log('Semua kelas diperbarui'))
+
+		.catch((error) => console.error(error));
+});
+
+cron.schedule('0 0 * * *', () => {
+	expireTransactions()
+		.then(() => console.log('Transaksi kadaluarsa diperbarui'))
+
+		.catch((error) => console.error(error));
+});
 
 app.post('/mentee/:id/review', async (req, res) => {
 	try {
@@ -1408,6 +1468,20 @@ async function updateAllSessionStatus() {
 		}
 	}
 }
+
+// Memanggil fungsi untuk memperbarui semua sesi
+// setInterval(() => {
+// 	updateAllSessionStatus()
+// 		.then(() => console.log('Semua status sesi diperbarui.'))
+// 		.catch((error) => console.error(error));
+// }, 1000); // 5000 milidetik = 5 detik
+
+cron.schedule('0 0 * * *', () => {
+	updateAllSessionStatus()
+		.then(() => console.log('Semua status sesi diperbarui.'))
+
+		.catch((error) => console.error(error));
+});
 
 // Create Evaluation
 app.post('/class/:id/evaluation', verifyToken, async (req, res) => {
