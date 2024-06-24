@@ -610,14 +610,6 @@ app.patch('/mentees/:id/profile', verifyToken, async (req, res) => {
 		const id = req.params.id;
 		const { job, company, skills, location, about, linkedin, experiences } = req.body;
 
-		// Validate URL format
-		if (!validUrl.isUri(linkedin)) {
-			return res.status(400).json({
-				error: true,
-				message: 'Invalid linkedin URL format',
-			});
-		}
-
 		// Check if the user exists
 		const existingUser = await prisma.user.findUnique({
 			where: { id: id },
@@ -673,7 +665,7 @@ app.patch('/mentees/:id/profile', verifyToken, async (req, res) => {
 		}
 
 		// Update the experiences from the experiences array
-		if (experiences && experiences.length > 0) {
+		if (experiences && experiences.length >= 0) {
 			await prisma.experience.deleteMany({
 				where: {
 					userId: id,
