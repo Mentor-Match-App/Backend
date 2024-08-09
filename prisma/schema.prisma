@@ -61,10 +61,12 @@ model Review {
   id         String @id @default(uuid()) @db.VarChar(64)
   reviewerId String @map("reviewer_id") @db.VarChar(64)
   mentorId   String @map("mentor_id") @db.VarChar(64)
+  classId    String @map("class_id") @db.VarChar(64)
   content    String @db.Text
 
-  reviewer User @relation("MenteeReviews", fields: [reviewerId], references: [id])
-  mentor   User @relation("MentorReviews", fields: [mentorId], references: [id])
+  reviewer User  @relation("MenteeReviews", fields: [reviewerId], references: [id])
+  mentor   User  @relation("MentorReviews", fields: [mentorId], references: [id])
+  class    Class @relation(fields: [classId], references: [id])
 
   @@map("reviews")
 }
@@ -170,6 +172,7 @@ model Class {
   transactions     Transaction[]
   learningMaterial LearningMaterial[]
   rejectReason     String?            @map("reject_reason") @db.VarChar(255)
+  Review           Review[]
 
   @@map("classes")
 }
